@@ -133,20 +133,20 @@ namespace Relations
 public export
 data Evaluation : T -> T -> Type where
 
-  EIfTrue  : Evaluation (IfThenElse True t2 t3) t2
+  EIfTrue  : Evaluation (IfThenElse True  t2 t3) t2
   EIfFalse : Evaluation (IfThenElse False t2 t3) t3
   EIf :  Evaluation t1 t1'
       -> Evaluation (IfThenElse t1 t2 t3) (IfThenElse t1' t2 t3)
 
   ESucc : Evaluation t1 t1' -> Evaluation (Succ t1) (Succ t1')
   
-  EPredZero :                           Evaluation (Pred Zero) Zero
+  EPredZero :                         Evaluation (Pred Zero)      Zero
   EPredSucc : (n : IsNumerical nv) -> Evaluation (Pred (Succ nv)) nv
-  EPred     : Evaluation t1 t1' -> Evaluation (Pred t1) (Pred t1')
+  EPred     : Evaluation t1 t1'    -> Evaluation (Pred t1)        (Pred t1')
   
-  EIsZeroZero :                           Evaluation (IsZero Zero) True
+  EIsZeroZero :                         Evaluation (IsZero Zero)      True
   EIsZeroSucc : (n : IsNumerical nv) -> Evaluation (IsZero (Succ nv)) False
-  EIsZero     : Evaluation t1 t1' -> Evaluation (IsZero t1) (IsZero t1')
+  EIsZero     : Evaluation t1 t1'    -> Evaluation (IsZero t1)        (IsZero t1')
 
 namespace Exercise_3_5_3
 
@@ -201,64 +201,24 @@ namespace Exercise_3_5_4
                                                                                                                         $ void (isNumericalDoNotReduce (Succ y) x) ()
   determinacy (IsZero t1)               (IsZero qqq)            (IsZero t1')            (EIsZero x)     (EIsZero y)     = rewrite (determinacy t1 qqq t1' x y) in Refl
 
--- namespace EvaluationMaybe
-
---   public export
---   data Evaluation : T -> Maybe T -> Type where
-
---     EFalse : Evaluation False (Just False)
---     ETrue  : Evaluation True (Just True)
---     EZero  : Evaluation Zero (Just Zero)
-
---     EIfTrue  : Evaluation (IfThenElse True  t2 t3) (Just t2)
---     EIfFalse : Evaluation (IfThenElse False t2 t3) (Just t3)
---     EIf :  Evaluation t1 (Just t1')
---         -> Evaluation (IfThenElse t1 t2 t3) (Just (IfThenElse t1' t2 t3))
-
---     ESucc : Evaluation t1 (Just t1') -> Evaluation (Succ t1) (Just (Succ t1'))
-    
---     EPredZero :                           Evaluation (Pred Zero) (Just Zero)
---     EPredSucc : (0 _ : IsNumerical nv) -> Evaluation (Pred (Succ nv)) (Just nv)
---     EPred     : Evaluation t1 (Just t1') -> Evaluation (Pred t1) (Just (Pred t1'))
-    
---     EIsZeroZero :                           Evaluation (IsZero Zero) (Just True)
---     EIsZeroSucc : (0 _ : IsNumerical nv) -> Evaluation (IsZero (Succ nv)) (Just False)
---     EIsZero     : Evaluation t1 (Just t1') -> Evaluation (IsZero t1) (Just (IsZero t1'))
-
-
-total -- covering
+total
 public export
-eval : T -> Maybe T
-eval True = Just True
-eval False = Just False
-eval Zero = Just Zero
-eval (Succ t) = map Succ (eval t)
-eval (Pred Zero) = Just Zero
+eval : T                   -> Maybe T
+eval True                   = Just True
+eval False                  = Just False
+eval Zero                   = Just Zero
+eval (Succ t)               = map Succ (eval t)
+eval (Pred Zero)            = Just Zero
 eval (Pred (Succ nv)) with (isNumerical nv)
-  _ | Just n = Just nv
+  _ | Just n                = Just nv
   _ | Nothing = map Pred (assert_total {- !!! -} (eval (Succ nv)))
 eval (Pred t) = map Pred (eval t)
-eval (IsZero Zero) = Just True
+eval (IsZero Zero)          = Just True
 eval (IsZero (Succ nv)) with (isNumerical nv)
-  _ | Just n = Just False
+  _ | Just n  = Just False
   _ | Nothing = map IsZero (assert_total {- !!! -} (eval (Succ nv)))
-eval (IsZero t) = map IsZero (eval t)
-eval (IfThenElse True t e) = Just t
+eval (IsZero t)             = map IsZero (eval t)
+eval (IfThenElse True t e)  = Just t
 eval (IfThenElse False t e) = Just e
-eval (IfThenElse p t e) = map (\x => IfThenElse x t e) (eval p)
-eval _  = Nothing
-
--- proofEval : (t : T) -> Evaluation t (eval t)
--- proofEval True = ETrue
--- proofEval False = EFalse
--- proofEval Zero = EZero
--- proofEval (Succ t) with (eval t)
---   _ | Just v = ESucc (proofEval t)
---   _ | Nothing = ?h2
--- proofEval (Pred t) = ?proofEval_rhs_5
--- proofEval (IsZero t) = ?proofEval_rhs_6
--- proofEval (IfThenElse p t e) = ?proofEval_rhs_7
-
-
-
-
+eval (IfThenElse p t e)     = map (\x => IfThenElse x t e) (eval p)
+eval _                      = Nothing
