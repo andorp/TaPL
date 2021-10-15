@@ -1,0 +1,12 @@
+package tapl
+
+authors = "Andor Penzes"
+
+depends = contrib
+
+main = Main
+
+executable = tapl
+
+builddir = ".build"
+outputdir = ".exec"
