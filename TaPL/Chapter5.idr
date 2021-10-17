@@ -71,36 +71,78 @@ namespace SortedSet
   size : SortedSet Variable -> Nat
   size s = length (SortedSet.toList s)
 
+  ||| The sketch of the LTE proof for the |Fv(t)| <= size(t)
+  |||
+  ||| With these pieces we can sketch the proof. This is the deep embedding of the proof.
+  ||| The 'freeVarsLTESizeProof' functions creates the actual proof object, which has
+  ||| two possible interpretations; one can be used to give the actual proof in terms
+  ||| of the properties if the SortedSet (which still needs to be proven), and a function
+  ||| that creates the Bool value, actually calling the functions, when we evaluate the
+  ||| property.
   public export
-  data DeepLTE : Nat -> Nat -> Type where
-    SingletonSet : (a : Variable)
-                -> DeepLTE (SortedSet.size (singleton a)) 1
-    DeleteSize   : (a : Variable) -> (as : SortedSet Variable)
-                -> DeepLTE (SortedSet.size (delete a as)) (SortedSet.size as)
-    UnionSize    : (a, b : SortedSet Variable)
-                -> DeepLTE (SortedSet.size (union a b)) (SortedSet.size a + SortedSet.size b)
-    LTESuccRight : DeepLTE m n -> DeepLTE m (S n)
-    Transitive   : {k : Nat} -> DeepLTE m k -> DeepLTE k n -> DeepLTE m n
-    Monotonicity : {a,b,c,d : Nat} -> DeepLTE a b -> DeepLTE c d -> DeepLTE (a + c) (b + d)
+  data FreeVarsLTESizeProof : Nat -> Nat -> Type where
+    SingletonSet
+      :                (a : Variable)                    ->
+      -----------------------------------------------------
+      FreeVarsLTESizeProof (SortedSet.size (singleton a)) 1
+    
+    DeleteSize
+      :                         (a : Variable)                             ->
+                               (as : SortedSet Variable)                   ->
+      -----------------------------------------------------------------------
+      FreeVarsLTESizeProof (SortedSet.size (delete a as)) (SortedSet.size as)
+    
+    UnionSize
+      :                       (a, b : SortedSet Variable)                                  ->
+      ---------------------------------------------------------------------------------------
+      FreeVarsLTESizeProof (SortedSet.size (union a b)) (SortedSet.size a + SortedSet.size b)
+    
+    LTESuccRight
+      :   FreeVarsLTESizeProof m n    ->
+      ----------------------------------
+          FreeVarsLTESizeProof m (S n)
+    
+    Transitive
+      :                       {k : Nat}                       ->
+        FreeVarsLTESizeProof m k -> FreeVarsLTESizeProof k n  ->
+      ----------------------------------------------------------
+                  FreeVarsLTESizeProof m n
 
+    Monotonicity
+      :                     {a,b,c,d : Nat} ->
+        FreeVarsLTESizeProof a b -> FreeVarsLTESizeProof c d  ->
+      ----------------------------------------------------------
+                FreeVarsLTESizeProof (a + c) (b + d)
+
+  ||| Creates the actual proof object based on the given Term t.
+  total
   export
-  freeVars_LTE_Size : (t : Term) -> DeepLTE (size (freeVars t)) (size t)
-  freeVars_LTE_Size (Var v)
+  freeVarsLTESizeProof : (t : Term) -> FreeVarsLTESizeProof (size (freeVars t)) (size t)
+  freeVarsLTESizeProof (Var v)
     = SingletonSet v
-  freeVars_LTE_Size (Lam v t)
+  freeVarsLTESizeProof (Lam v t)
     = Transitive
         (DeleteSize v (freeVars t))
-        (LTESuccRight (freeVars_LTE_Size t))
-  freeVars_LTE_Size (App t1 t2)
+        (LTESuccRight (freeVarsLTESizeProof t))
+  freeVarsLTESizeProof (App t1 t2)
     = Transitive
         (UnionSize (freeVars t1) (freeVars t2))
         (LTESuccRight
           (Monotonicity
-            (freeVars_LTE_Size t1)
-            ((freeVars_LTE_Size t2))))
+            (freeVarsLTESizeProof t1)
+            ((freeVarsLTESizeProof t2))))
 
+  ||| Check if the given proof object has a True evaluation in the
+  ||| interpretation (vaguely speaking) in the value universe.
+  ||| This function is expected to always return to True,
+  ||| if it returns False some property is broken, we need further
+  ||| investigation.
+  |||
+  ||| This function can be used in a property based testing framework to
+  ||| actually check if the desired property holds.
+  total
   export
-  lteProperty : {m,n : Nat} -> DeepLTE m n -> Bool
+  lteProperty : {m,n : Nat} -> FreeVarsLTESizeProof m n -> Bool
   lteProperty (SingletonSet a)    = m <= n
   lteProperty (DeleteSize a as)   = m <= n
   lteProperty (UnionSize a b)     = m <= n
@@ -108,8 +150,12 @@ namespace SortedSet
   lteProperty (Transitive x y)    = m <= n && lteProperty x && lteProperty y
   lteProperty (Monotonicity x y)  = m <= n && lteProperty x && lteProperty y
 
+  ||| The constructive proof for the defunctionalized FreeVarsLTESizeProof.
+  ||| If we can create an LTE value from the FreeVarsLTESizeProof we are
+  ||| sure that all the properties hold.
+  total
   export
-  lteProof : DeepLTE m n -> LTE m n
+  lteProof : FreeVarsLTESizeProof m n -> LTE m n
   lteProof (SingletonSet a) = ?lteProof_rhs_1
   lteProof (DeleteSize a as) = ?lteProof_rhs_2
   lteProof (UnionSize a b) = ?lteProof_rhs_3
@@ -117,8 +163,9 @@ namespace SortedSet
   lteProof (Transitive x y) = ?lteProof_rhs_5
   lteProof (Monotonicity x y) = ?lteProof_rhs_6
 
+  -- Example how to use the lteProperty
   isItOk : (t : Term) -> Bool
-  isItOk t = lteProperty (freeVars_LTE_Size t)
+  isItOk t = lteProperty (freeVarsLTESizeProof t)
 
 
 
