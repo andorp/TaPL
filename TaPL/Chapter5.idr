@@ -80,24 +80,47 @@ namespace SortedSet
     UnionSize    : (a, b : SortedSet Variable)
                 -> DeepLTE (SortedSet.size (union a b)) (SortedSet.size a + SortedSet.size b)
     LTESuccRight : DeepLTE m n -> DeepLTE m (S n)
-    Transitive   : DeepLTE m k -> DeepLTE k n -> DeepLTE m n
-    Monotonicity : DeepLTE m n -> DeepLTE p q -> DeepLTE (m + p) (n + q)
+    Transitive   : {k : Nat} -> DeepLTE m k -> DeepLTE k n -> DeepLTE m n
+    Monotonicity : {a,b,c,d : Nat} -> DeepLTE a b -> DeepLTE c d -> DeepLTE (a + c) (b + d)
 
   export
-  lessFreeVarsThanSize : (t : Term) -> DeepLTE (size (freeVars t)) (size t)
-  lessFreeVarsThanSize (Var v)
+  freeVars_LTE_Size : (t : Term) -> DeepLTE (size (freeVars t)) (size t)
+  freeVars_LTE_Size (Var v)
     = SingletonSet v
-  lessFreeVarsThanSize (Lam v t)
+  freeVars_LTE_Size (Lam v t)
     = Transitive
         (DeleteSize v (freeVars t))
-        (LTESuccRight (lessFreeVarsThanSize t))
-  lessFreeVarsThanSize (App t1 t2)
+        (LTESuccRight (freeVars_LTE_Size t))
+  freeVars_LTE_Size (App t1 t2)
     = Transitive
         (UnionSize (freeVars t1) (freeVars t2))
         (LTESuccRight
           (Monotonicity
-            (lessFreeVarsThanSize t1)
-            ((lessFreeVarsThanSize t2))))
+            (freeVars_LTE_Size t1)
+            ((freeVars_LTE_Size t2))))
+
+  export
+  lteProperty : {m,n : Nat} -> DeepLTE m n -> Bool
+  lteProperty (SingletonSet a)    = m <= n
+  lteProperty (DeleteSize a as)   = m <= n
+  lteProperty (UnionSize a b)     = m <= n
+  lteProperty (LTESuccRight x)    = m <= n && lteProperty x
+  lteProperty (Transitive x y)    = m <= n && lteProperty x && lteProperty y
+  lteProperty (Monotonicity x y)  = m <= n && lteProperty x && lteProperty y
+
+  export
+  lteProof : DeepLTE m n -> LTE m n
+  lteProof (SingletonSet a) = ?lteProof_rhs_1
+  lteProof (DeleteSize a as) = ?lteProof_rhs_2
+  lteProof (UnionSize a b) = ?lteProof_rhs_3
+  lteProof (LTESuccRight x) = ?lteProof_rhs_4
+  lteProof (Transitive x y) = ?lteProof_rhs_5
+  lteProof (Monotonicity x y) = ?lteProof_rhs_6
+
+  isItOk : (t : Term) -> Bool
+  isItOk t = lteProperty (freeVars_LTE_Size t)
+
+
 
 data Substitution : Type where
   Subst : (x : Variable) -> (s : Term) -> Substitution
