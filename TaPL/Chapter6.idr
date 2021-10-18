@@ -31,8 +31,14 @@ restoreNames (Var {g} {gamma} k)       = Var (index k gamma)
 restoreNames (Lam {g} {gamma} {var} t) = Lam var (restoreNames t)
 restoreNames (App {g} {gamma} t1 t2)   = App (restoreNames t1) (restoreNames t2)
 
-removeNames : (gamma : Context g) -> Ordinary.Term -> Either String (Nameless.Term gamma)
-removeNames gamma (Var x) = ?removeNames_rhs_1
-removeNames gamma (Lam x y) = ?removeNames_rhs_2
-removeNames gamma (App x y) = ?removeNames_rhs_3
-
+removeNames : {g : Nat} -> (gamma : Context g) -> Ordinary.Term -> Either String (Nameless.Term gamma)
+removeNames gamma (Var x) with (findIndex (==x) gamma)
+  _ | Nothing  = Left "Variable \{x} is not in \{show gamma}"
+  _ | Just idx = Right $ Var idx
+removeNames gamma (Lam x y) = do
+  t <- removeNames (x :: gamma) y
+  Right (Lam {var=x} t)
+removeNames gamma (App x y) = do
+  t1 <- removeNames gamma x
+  t2 <- removeNames gamma y
+  Right (App t1 t2)
