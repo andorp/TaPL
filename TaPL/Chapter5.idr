@@ -42,6 +42,10 @@ namespace Induction
 
   namespace Size
 
+    -- If, for each natural number n,
+    --   given P (i) for all i < n
+    --   we can show P (n),
+    --   then P (n) holds for all n. 
     export
     size :  {p : Term -> Type}
         -> (step : (x : Term) -> ((y : Term) -> (LT (size y) (size x)) -> p y) -> p x) -> (s : Term) -> p s
@@ -81,40 +85,54 @@ namespace SortedSet
   ||| property.
   public export
   data FreeVarsLTESizeProof : Nat -> Nat -> Type where
+
+    ||| The singleton sets have the size less then equal to one.
     SingletonSet
-      :                (a : Variable)                    ->
-      -----------------------------------------------------
-      FreeVarsLTESizeProof (SortedSet.size (singleton a)) 1
+      :              (a : Variable)            ->
+      -------------------------------------------
+      FreeVarsLTESizeProof (size (singleton a)) 1
     
+    ||| The delete operation could remove one element from the set,
+    ||| leading to the assumption of the new set has less than or
+    ||| equal number of elements compared to the original set.
     DeleteSize
-      :                         (a : Variable)                             ->
-                               (as : SortedSet Variable)                   ->
-      -----------------------------------------------------------------------
-      FreeVarsLTESizeProof (SortedSet.size (delete a as)) (SortedSet.size as)
+      :                (a : Variable)                  ->
+                  (as : SortedSet Variable)            ->
+      ---------------------------------------------------
+      FreeVarsLTESizeProof (size (delete a as)) (size as)
     
+    ||| The size of the union of two sets should be less than equal
+    ||| to the addition of the size of the each sets.
     UnionSize
-      :                       (a, b : SortedSet Variable)                                  ->
-      ---------------------------------------------------------------------------------------
-      FreeVarsLTESizeProof (SortedSet.size (union a b)) (SortedSet.size a + SortedSet.size b)
+      :          (a, b : SortedSet Variable)                 ->
+      ---------------------------------------------------------
+      FreeVarsLTESizeProof (size (union a b)) (size a + size b)
     
+    ||| The trivial assumption of when m <= n then m <= (S n)
     LTESuccRight
       :   FreeVarsLTESizeProof m n    ->
       ----------------------------------
           FreeVarsLTESizeProof m (S n)
     
+    ||| The tranisitivity property of the less than equal;
+    ||| if m <= k and k <= n then m <= n
     Transitive
       :                       {k : Nat}                       ->
         FreeVarsLTESizeProof m k -> FreeVarsLTESizeProof k n  ->
       ----------------------------------------------------------
                   FreeVarsLTESizeProof m n
 
+    ||| The monotonicity property of the less than equal operation;
+    ||| if a <= b and c <= d then (a + c) <= (b + d)
     Monotonicity
       :                     {a,b,c,d : Nat} ->
         FreeVarsLTESizeProof a b -> FreeVarsLTESizeProof c d  ->
       ----------------------------------------------------------
                 FreeVarsLTESizeProof (a + c) (b + d)
 
-  ||| Creates the actual proof object based on the given Term t.
+  ||| The sketch of the proof that |Fv(t)| <= size(t). It uses the
+  ||| deeply embedded proof steps to create the spine/sketch of the
+  ||| proof which can be used in different contexts.
   total
   export
   freeVarsLTESizeProof : (t : Term) -> FreeVarsLTESizeProof (size (freeVars t)) (size t)
@@ -153,20 +171,27 @@ namespace SortedSet
   ||| The constructive proof for the defunctionalized FreeVarsLTESizeProof.
   ||| If we can create an LTE value from the FreeVarsLTESizeProof we are
   ||| sure that all the properties hold.
+  |||
+  ||| Even if we don't have the actual proofs yet, we know what to proof and
+  ||| how it fits to the spine of the proof. The things around the LTE constructive
+  ||| proofs are given, but the ones around SortedSet are not (yet).
   total
   export
-  lteProof : FreeVarsLTESizeProof m n -> LTE m n
-  lteProof (SingletonSet a) = ?lteProof_rhs_1
-  lteProof (DeleteSize a as) = ?lteProof_rhs_2
-  lteProof (UnionSize a b) = ?lteProof_rhs_3
-  lteProof (LTESuccRight x) = ?lteProof_rhs_4
-  lteProof (Transitive x y) = ?lteProof_rhs_5
+  lteProof : {m,n : Nat} -> FreeVarsLTESizeProof m n -> LTE m n
+  lteProof (SingletonSet a)   = ?lteProof_rhs_1
+  lteProof (DeleteSize a as)  = ?lteProof_rhs_2
+  lteProof (UnionSize a b)    = ?lteProof_rhs_3
+  lteProof (LTESuccRight x)   = lteSuccRight (lteProof x)
+  lteProof (Transitive x y)   = transitive {ty=Nat} {rel=LTE} (lteProof x) (lteProof y)
   lteProof (Monotonicity x y) = ?lteProof_rhs_6
 
   -- Example how to use the lteProperty
+  -- In a QuickCheck like framework we could generate random Terms and the testing
+  -- framework could use the computed Bool to assess if the expected property
+  -- holds around proofs, if not, two things could be; the first that the freeVars
+  -- implementation has some bugs, or the SortedSet has some bugs.
   isItOk : (t : Term) -> Bool
   isItOk t = lteProperty (freeVarsLTESizeProof t)
-
 
 
 data Substitution : Type where
@@ -192,15 +217,15 @@ namespace Evaluation
 
   data Evaluation : Term -> Term -> Type where
 
-    EApp1 :
-              Not (Value t1)    -> 
-              Evaluation t1 t1' ->
+    EApp1
+      :        Not (Value t1)          -> 
+               Evaluation t1 t1'       ->
       -----------------------------------
       Evaluation (App t1 t2) (App t1' t2)
 
-    EApp2 :
-                   Value v1     ->
-              Evaluation t2 t2' ->
+    EApp2
+      :             Value v1           ->
+               Evaluation t2 t2'       ->
       -----------------------------------
       Evaluation (App v1 t2) (App v1 t2')
 
