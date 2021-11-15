@@ -137,7 +137,7 @@ namespace Exercise_8_3_1
   total public export 0
   CanonicalFormTy : Ty -> Tm -> Type
   CanonicalFormTy Bool t = Either (t = True) (t = False)
-  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r))
+  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r, Value r))
 
   total 0
   cannonicalFormsBool : (tm : Tm) -> (v : Value tm) -> (tm `HasType` Bool) -> CanonicalFormTy Bool tm
@@ -176,7 +176,7 @@ namespace Exercise_8_3_1
   total 0
   cannonicalFormsNValNat : (tm : Tm) -> (v : NValue tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
   cannonicalFormsNValNat Zero     Zero     x         = Left Refl
-  cannonicalFormsNValNat (Succ t) (Succ y) (TSucc x) = Right (t ** Refl)
+  cannonicalFormsNValNat (Succ t) (Succ y) (TSucc x) = Right (t ** (Refl, NVal y))
 
   total 0
   cannonicalFormsNat : (tm : Tm) -> (v : Value tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
