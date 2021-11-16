@@ -91,9 +91,9 @@ data HasType : Tm -> Ty -> Type where
     False `HasType` Bool
 
   TIf :
-    {ty : Ty} -> (tm1 `HasType` Bool) -> (tm2 `HasType` ty) -> (tm3 `HasType` ty) ->
-    --------------------------------------------------------------------------------
-                    (IfThenElse tm1 tm2 tm3) `HasType` ty
+    {ty : Ty} -> (ty1 : tm1 `HasType` Bool) -> (ty2 : tm2 `HasType` ty) -> (ty3 : tm3 `HasType` ty) ->
+    --------------------------------------------------------------------------------------------------
+                                  (IfThenElse tm1 tm2 tm3) `HasType` ty
 
   TZero :
     ------------------
@@ -238,7 +238,7 @@ namespace Exercise_8_3_1
   cannonicalForms tm Bool v x = cannonicalFormsBool tm v x
   cannonicalForms tm Nat  v x = cannonicalFormsNat  tm v x
 
-namespace Exercise_8_2_3
+namespace Exercise_8_3_2
 
   total 0
   progress : (tm : Tm) -> (ty : Ty) -> (tm `HasType` ty) -> Either (Value tm) (tm' : Tm ** Evaluation tm tm')
@@ -265,3 +265,21 @@ namespace Exercise_8_2_3
       Left  vZero                     => rewrite vZero in Right (True ** EIsZeroZero)
       Right (t' ** (vSucc, nValuet')) => rewrite vSucc in Right (False ** (EIsZeroSucc nValuet'))
     Right (tm' ** evalTmToTm') => Right ((IsZero tm') ** (EIsZero evalTmToTm'))
+
+namespace Exercise_8_3_3
+
+  total 0
+  preservation : (tm,tm' : Tm)                                  -> (ty : Ty) -> (tm `HasType` ty)    -> Evaluation tm tm'  -> tm' `HasType` ty
+  preservation True                       tm'                       Bool        TTrue                   evalTrue              impossible
+  preservation False                      tm'                       Bool        TFalse                  evalFalse             impossible
+  preservation (IfThenElse True  tm2 tm3) tm2                       ty          (TIf ty1 ty2 ty3)       EIfTrue               = ty2
+  preservation (IfThenElse False tm2 tm3) tm3                       ty          (TIf ty1 ty2 ty3)       EIfFalse              = ty3
+  preservation (IfThenElse tm1 tm2 tm3)   (IfThenElse tm1' tm2 tm3) ty          (TIf ty1 ty2 ty3)       (EIf x)               = TIf (preservation tm1 tm1' Bool ty1 x) ty2 ty3
+  preservation Zero                       tm'                       Nat         TZero                   evalZero              impossible
+  preservation (Succ tm)                  (Succ tm')                Nat         (TSucc tmIsNat)         (ESucc evalTmToTm')   = TSucc (preservation tm tm' Nat tmIsNat evalTmToTm')
+  preservation (Pred Zero)                Zero                      Nat         (TPred tmIsNat)         EPredZero             = tmIsNat
+  preservation (Pred (Succ tm'))          tm'                       Nat         (TPred (TSucc tmIsNat)) (EPredSucc n)         = tmIsNat
+  preservation (Pred tm)                  (Pred tm')                Nat         (TPred tmIsNat)         (EPred evalTmToTm')   = TPred (preservation tm tm' Nat tmIsNat evalTmToTm')
+  preservation (IsZero Zero)              True                      Bool        (TIsZero tmIsNat)       EIsZeroZero           = TTrue
+  preservation (IsZero (Succ nv))         False                     Bool        (TIsZero tmIsNat)       (EIsZeroSucc n)       = TFalse
+  preservation (IsZero tm)                (IsZero tm')              Bool        (TIsZero tmIsNat)       (EIsZero evalTmToTm') = TIsZero (preservation tm tm' Nat tmIsNat evalTmToTm')
