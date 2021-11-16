@@ -25,6 +25,57 @@ namespace Value
     False : Value False
     NVal  : NValue t -> Value t  
 
+namespace Evaluation
+
+  public export
+  data Evaluation : Tm -> Tm -> Type where
+
+    EIfTrue :
+      --------------------------------------
+      Evaluation (IfThenElse True  t2 t3) t2
+    
+    EIfFalse :
+      --------------------------------------
+      Evaluation (IfThenElse False t2 t3) t3
+    
+    EIf :
+                        Evaluation t1 t1'                  ->
+      -------------------------------------------------------
+      Evaluation (IfThenElse t1 t2 t3) (IfThenElse t1' t2 t3)
+
+    ESucc :
+            Evaluation t1 t1'      ->
+      -------------------------------
+      Evaluation (Succ t1) (Succ t1')
+    
+    EPredZero :
+      ---------------------------
+      Evaluation (Pred Zero) Zero
+    
+    EPredSucc :
+             (n : NValue nv)      ->
+      ------------------------------
+      Evaluation (Pred (Succ nv)) nv
+    
+    EPred :
+            Evaluation t1 t1'      ->
+      -------------------------------
+      Evaluation (Pred t1) (Pred t1')
+    
+    EIsZeroZero :
+      -----------------------------
+      Evaluation (IsZero Zero) True
+    
+    EIsZeroSucc :
+                (n : NValue nv)        ->
+      -----------------------------------
+      Evaluation (IsZero (Succ nv)) False
+    
+    EIsZero :
+              Evaluation t1 t1'        ->
+      -----------------------------------
+      Evaluation (IsZero t1) (IsZero t1')
+
 data Ty : Type where
   Bool : Ty
   Nat  : Ty
@@ -137,7 +188,7 @@ namespace Exercise_8_3_1
   total public export 0
   CanonicalFormTy : Ty -> Tm -> Type
   CanonicalFormTy Bool t = Either (t = True) (t = False)
-  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r, Value r))
+  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r, NValue r))
 
   total 0
   cannonicalFormsBool : (tm : Tm) -> (v : Value tm) -> (tm `HasType` Bool) -> CanonicalFormTy Bool tm
@@ -176,13 +227,41 @@ namespace Exercise_8_3_1
   total 0
   cannonicalFormsNValNat : (tm : Tm) -> (v : NValue tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
   cannonicalFormsNValNat Zero     Zero     x         = Left Refl
-  cannonicalFormsNValNat (Succ t) (Succ y) (TSucc x) = Right (t ** (Refl, NVal y))
+  cannonicalFormsNValNat (Succ t) (Succ y) (TSucc x) = Right (t ** (Refl, y))
 
   total 0
   cannonicalFormsNat : (tm : Tm) -> (v : Value tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
   cannonicalFormsNat tm (NVal y) x = cannonicalFormsNValNat tm y x
 
-  total 0
+  public export total 0
   cannonicalForms : (tm : Tm) -> (ty : Ty) -> (v : Value tm) -> (tm `HasType` ty) -> CanonicalFormTy ty tm
   cannonicalForms tm Bool v x = cannonicalFormsBool tm v x
   cannonicalForms tm Nat  v x = cannonicalFormsNat  tm v x
+
+namespace Exercise_8_2_3
+
+  total 0
+  progress : (tm : Tm) -> (ty : Ty) -> (tm `HasType` ty) -> Either (Value tm) (tm' : Tm ** Evaluation tm tm')
+  progress True   Bool TTrue  = Left True
+  progress False  Bool TFalse = Left False
+  progress (IfThenElse tm1 tm2 tm3) ty (TIf tm1IsBool tm2IsTy tm3IsTy) = case (progress tm1 Bool tm1IsBool) of
+    Left valueTm1 => case (cannonicalForms tm1 Bool valueTm1 tm1IsBool) of
+      Left  vTrue  => rewrite vTrue  in Right (tm2 ** EIfTrue)
+      Right vFalse => rewrite vFalse in Right (tm3 ** EIfFalse)
+    Right (tm' ** evalTm1toTm) => Right (IfThenElse tm' tm2 tm3 ** EIf evalTm1toTm)
+  progress Zero Nat TZero = Left (NVal Zero)
+  progress (Succ tm) Nat (TSucc tmIsNat) = case (progress tm Nat tmIsNat) of
+    Left valueTm => case (cannonicalForms tm Nat valueTm tmIsNat) of
+      Left vZero                      => rewrite vZero in Left (NVal (Succ Zero))
+      Right (t' ** (vSucc, nValuet')) => rewrite vSucc in Left (NVal (Succ (Succ nValuet')))
+    Right (tm' ** evalTmToTm') => Right (Succ tm' ** ESucc evalTmToTm')
+  progress (Pred tm) Nat (TPred tmIsNat) = case (progress tm Nat tmIsNat) of
+    Left valueTm => case (cannonicalForms tm Nat valueTm tmIsNat) of
+      Left  vZero                     => rewrite vZero in Right (Zero ** EPredZero)
+      Right (t' ** (vSucc, nValuet')) => rewrite vSucc in Right (t' ** EPredSucc nValuet')
+    Right (tm' ** evalTmToTm') => Right (Pred tm' ** EPred evalTmToTm')
+  progress (IsZero tm) Bool (TIsZero x) = case (progress tm Nat x) of
+    Left valueTm => case (cannonicalForms tm Nat valueTm x) of
+      Left  vZero                     => rewrite vZero in Right (True ** EIsZeroZero)
+      Right (t' ** (vSucc, nValuet')) => rewrite vSucc in Right (False ** (EIsZeroSucc nValuet'))
+    Right (tm' ** evalTmToTm') => Right ((IsZero tm') ** (EIsZero evalTmToTm'))
