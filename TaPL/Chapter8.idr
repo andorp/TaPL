@@ -15,15 +15,15 @@ namespace Term
 namespace Value
 
   public export
-  data NValue : Tm -> Type where
-    Zero  : NValue Zero
-    Succ  : NValue t -> NValue (Succ t)
+  data NatValue : Tm -> Type where
+    Zero  : NatValue Zero
+    Succ  : NatValue t -> NatValue (Succ t)
 
   public export
   data Value : Tm -> Type where
     True  : Value True
     False : Value False
-    NVal  : NValue t -> Value t  
+    NVal  : NatValue t -> Value t  
 
 namespace Evaluation
 
@@ -53,7 +53,7 @@ namespace Evaluation
       Evaluation (Pred Zero) Zero
     
     EPredSucc :
-             (n : NValue nv)      ->
+            (n : NatValue nv)     ->
       ------------------------------
       Evaluation (Pred (Succ nv)) nv
     
@@ -67,7 +67,7 @@ namespace Evaluation
       Evaluation (IsZero Zero) True
     
     EIsZeroSucc :
-                (n : NValue nv)        ->
+              (n : NatValue nv)        ->
       -----------------------------------
       Evaluation (IsZero (Succ nv)) False
     
@@ -188,7 +188,7 @@ namespace Exercise_8_3_1
   total public export 0
   CanonicalFormTy : Ty -> Tm -> Type
   CanonicalFormTy Bool t = Either (t = True) (t = False)
-  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r, NValue r))
+  CanonicalFormTy Nat  t = Either (t = Zero) (r : Tm ** (t = Succ r, NatValue r))
 
   total 0
   cannonicalFormsBool : (tm : Tm) -> (v : Value tm) -> (tm `HasType` Bool) -> CanonicalFormTy Bool tm
@@ -225,7 +225,7 @@ namespace Exercise_8_3_1
   cannonicalFormsBool (IfThenElse _ _ _)  (NVal (Succ y)) _           impossible
 
   total 0
-  cannonicalFormsNValNat : (tm : Tm) -> (v : NValue tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
+  cannonicalFormsNValNat : (tm : Tm) -> (v : NatValue tm) -> (tm `HasType` Nat) -> CanonicalFormTy Nat tm
   cannonicalFormsNValNat Zero     Zero     x         = Left Refl
   cannonicalFormsNValNat (Succ t) (Succ y) (TSucc x) = Right (t ** (Refl, y))
 
