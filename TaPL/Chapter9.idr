@@ -76,10 +76,6 @@ namespace Context
     There : InGamma x gamma -> InGamma x (gamma :< y)
 
   public export
-  data Wellformed : Gamma -> Type where
-    -- TODO
-
-  public export
   Uninhabited (InGamma _ [<]) where
     uninhabited _ impossible
 
@@ -93,6 +89,10 @@ namespace Context
       (No x_is_not_in_gamma) => No $ \case
         Here      => x_is_not_y Refl
         (There x) => x_is_not_in_gamma x
+
+  export
+  DecEq (InGamma x g) where
+    decEq _ _ = ?dc1
 
 data Evaluation : Tm -> Tm -> Type where
 
@@ -170,16 +170,3 @@ namespace Exercise_9_3_1
   inversion gamma (IfThenElse _ _ _ <:> _)        (TIf x y z)     = (x, y, z)
 
 namespace Exercise_9_3_2
-
-  uniquenessOfTypes : (gamma : Gamma) -> (t : Tm) -> (ty1, ty2 : Ty) -> (gamma |- (t <:> ty1)) -> (gamma |- (t <:> ty2)) -> ty1 = ty2
-  uniquenessOfTypes (gamma :< (x, ty1)) (Var x) ty1 ty2 (TVar Here)      (TVar typ2) = ?uniquenessOfTypes_rhs_10
-  uniquenessOfTypes (gamma :< (y, r))   (Var x) ty1 ty2 (TVar (There z)) (TVar typ2) = ?uniquenessOfTypes_rhs_11
-  uniquenessOfTypes [<] (Var x) ty1 ty2 _ _ = case (inGamma (x, ty1) [<]) of
-    (Yes prf) => ?h2_1
-    (No contra) => ?h2_2
-  uniquenessOfTypes gamma (Abs x ty1 tm2) (Fun ty1 rty1) (Fun ty1 rty2) (TAbs typ1) (TAbs typ2) = ?uniquenessOfTypes_rhs_9
-  uniquenessOfTypes gamma (App tm1 tm2) ty1 ty2 (TApp x y) typing2 = ?uniquenessOfTypes_rhs_4
-  uniquenessOfTypes gamma True Bool ty2 TTrue typing2 = ?uniquenessOfTypes_rhs_5
-  uniquenessOfTypes gamma False Bool ty2 TFalse typing2 = ?uniquenessOfTypes_rhs_6
-  uniquenessOfTypes gamma (IfThenElse tmp tmt tme) ty1 ty2 (TIf x y z) typing2 = ?uniquenessOfTypes_rhs_7
-
