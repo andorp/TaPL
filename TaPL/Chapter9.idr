@@ -136,33 +136,25 @@ data (|-) : Gamma -> TypeStatement -> Type where
                      gamma |- (IfThenElse tmp tmt tme <:> ty)
 
 
--- namespace Exercise_9_3_1
+namespace Exercise_9_3_1
 
---   public export 0
---   InversionTy : (gamma : Gamma ns) -> (tty : TypeStatement) -> (gamma |- tty) -> Type
---   -- InversionTy gamma (Var x <:> (tyFrom g)) (TVar g) = InGamma x gamma
---   -- InversionTy gamma (Abs xx ty1 tm2 <:> Fun ty1 ty2) (TAbs x) = (gamma :< MkGE xx ty1) |- tm2 <:> ty2
---   -- InversionTy gamma (App tm1 tm2 <:> ty12) (TApp {ty11} x y) = (gamma |- tm1 <:> Fun ty11 ty12, gamma |- tm2 <:> ty11)
---   -- InversionTy gamma (True <:> Bool) TTrue = DPair Ty $ \r => ((True <:> Bool) = (True <:> r))
---   -- InversionTy gamma (False <:> Bool) TFalse = DPair Ty $ \r => ((False <:> Bool) = (False <:> r))
---   -- InversionTy gamma (IfThenElse tmp tmt tme <:> ty) (TIf x y z) = (gamma |- tmp <:> Bool, gamma |- tmt <:> ty, gamma |- tme <:> ty)
-  
---   InversionTy gamma (Var x                  <:> (tyFrom g))  (TVar _)          = InGamma x gamma
---   InversionTy gamma (Abs x ty1 tm2          <:> Fun ty1 ty2) (TAbs _)          = (gamma :< MkGE x ty1) |- tm2 <:> ty2
---   InversionTy gamma (App tm1 tm2            <:> ty12)        (TApp {ty11} _ _) = (gamma |- tm1 <:> Fun ty11 ty12, gamma |- tm2 <:> ty11)
---   InversionTy gamma (True                   <:> Bool)        TTrue             = DPair Ty $ \r => ((True <:> Bool) = (True <:> r))
---   InversionTy gamma (False                  <:> Bool)        TFalse            = DPair Ty $ \r => ((False <:> Bool) = (False <:> r))
---   InversionTy gamma (IfThenElse tmp tmt tme <:> ty)          (TIf _ _ _)       = (gamma |- tmp <:> Bool, gamma |- tmt <:> ty, gamma |- tme <:> ty)
+  0
+  InversionTy : (gamma : Gamma) -> (tty : TypeStatement) -> (gamma |- tty) -> Type 
+  InversionTy gamma (Var x                  <:> ty1)         (TVar _)          = InGamma x ty1 gamma
+  InversionTy gamma (Abs x ty1 tm2          <:> Fun ty1 ty2) (TAbs _)          = (gamma :< (x,ty1)) |- tm2 <:> ty2
+  InversionTy gamma (App tm1 tm2            <:> ty12)        (TApp {ty11} _ _) = (gamma |- tm1 <:> Fun ty11 ty12, gamma |- tm2 <:> ty11)
+  InversionTy gamma (True                   <:> Bool)        TTrue             = DPair Ty $ \r => ((True <:> Bool) = (True <:> r))
+  InversionTy gamma (False                  <:> Bool)        TFalse            = DPair Ty $ \r => ((False <:> Bool) = (False <:> r))
+  InversionTy gamma (IfThenElse tmp tmt tme <:> ty)          (TIf _ _ _)       = (gamma |- tmp <:> Bool, gamma |- tmt <:> ty, gamma |- tme <:> ty)
 
---   public export 0
---   inversion : (gamma : Gamma ns) -> (tty : TypeStatement) -> (typing : gamma |- tty) -> InversionTy gamma tty typing
---   inversion gamma (Var _            <:> _)        (TVar inGamma)  = inGamma
---   inversion gamma (Abs _ _ _        <:> Fun _ _)  (TAbs tp)       = tp
---   inversion gamma (App _ _          <:> _)        (TApp x y)      = (x, y)
---   inversion gamma (True             <:> Bool)     TTrue           = MkDPair Bool Refl
---   inversion gamma (False            <:> Bool)     TFalse          = MkDPair Bool Refl
---   inversion gamma (IfThenElse _ _ _ <:> _)        (TIf x y z)     = (x, y, z)
-
+  0
+  inversion : (gamma : Gamma) -> (tty : TypeStatement) -> (typing : gamma |- tty) -> InversionTy gamma tty typing
+  inversion gamma (Var _            <:> _)        (TVar inGamma)  = inGamma
+  inversion gamma (Abs _ _ _        <:> Fun _ _)  (TAbs tp)       = tp
+  inversion gamma (App _ _          <:> _)        (TApp x y)      = (x, y)
+  inversion gamma (True             <:> Bool)     TTrue           = MkDPair Bool Refl
+  inversion gamma (False            <:> Bool)     TFalse          = MkDPair Bool Refl
+  inversion gamma (IfThenElse _ _ _ <:> _)        (TIf x y z)     = (x, y, z)
 
 namespace Exercise_9_3_2
 
