@@ -17,7 +17,7 @@ mutual
 
     True  : Tm
     False : Tm
-    IfThenElse : (p,t,e : Tm) -> Tm
+--    IfThenElse : (p,t,e : Tm) -> Tm
 
   public export
   data Ty : Type where
@@ -52,16 +52,15 @@ substituition s (Abs var ty t) = Abs var ty (substituition s t)
 substituition s (App t1 t2) = App (substituition s t1) (substituition s t2)
 substituition s True = True
 substituition s False = False
-substituition s (IfThenElse p t e) = IfThenElse (substituition s p) (substituition s t) (substituition s e)
+-- substituition s (IfThenElse p t e) = IfThenElse (substituition s p) (substituition s t) (substituition s e)
 
 namespace Value
 
   public export
-  data Val : Tm -> Type where
-    Abs   : Val (Abs var ty t)
-    True  : Val True
-    False : Val False
-    IfThenElse : (pv : Val p) -> (pt : Val t) -> (pe : Val e) -> Val (IfThenElse p t e)
+  data Value : Tm -> Type where
+    Abs   : Value (Abs var ty t)
+    True  : Value True
+    False : Value False
 
 namespace Context
 
@@ -88,13 +87,13 @@ data Evaluation : Tm -> Tm -> Type where
     Evaluation (App t1 t2) (App t1' t2)
   
   EApp2 :
-                 (Val v1)          ->
+                 Value v1          ->
               Evaluation t t'      ->
     ---------------------------------            
     Evaluation (App v1 t) (App v1 t')
 
   EAppAbs :
-                          (Val v1)                       ->
+                          Value v                        ->
     -------------------------------------------------------
     Evaluation (App (Abs x ty t) v) (substituition (x,v) t)
 
@@ -130,11 +129,13 @@ data (|-) : Gamma -> TypeStatement -> Type where
     -----------------------
     gamma |- False <:> Bool
 
-  TIf :
-    (gamma |- tmp <:> Bool) -> (gamma |- tmt <:> ty) -> (gamma |- tme <:> ty) ->
-    ----------------------------------------------------------------------------
-                     gamma |- (IfThenElse tmp tmt tme <:> ty)
+  -- TIf :
+  --   (gamma |- tmp <:> Bool) -> (gamma |- tmt <:> ty) -> (gamma |- tme <:> ty) ->
+  --   ----------------------------------------------------------------------------
+  --                    gamma |- (IfThenElse tmp tmt tme <:> ty)
 
+data Closed : Tm -> Type where
+   ClosedTerm : (ty : Ty) -> ([<] |- (tm <:> ty)) -> Closed tm
 
 namespace Exercise_9_3_1
 
@@ -145,7 +146,7 @@ namespace Exercise_9_3_1
   InversionTy gamma (App tm1 tm2            <:> ty12)        (TApp {ty11} _ _) = (gamma |- tm1 <:> Fun ty11 ty12, gamma |- tm2 <:> ty11)
   InversionTy gamma (True                   <:> Bool)        TTrue             = DPair Ty $ \r => ((True <:> Bool) = (True <:> r))
   InversionTy gamma (False                  <:> Bool)        TFalse            = DPair Ty $ \r => ((False <:> Bool) = (False <:> r))
-  InversionTy gamma (IfThenElse tmp tmt tme <:> ty)          (TIf _ _ _)       = (gamma |- tmp <:> Bool, gamma |- tmt <:> ty, gamma |- tme <:> ty)
+--  InversionTy gamma (IfThenElse tmp tmt tme <:> ty)          (TIf _ _ _)       = (gamma |- tmp <:> Bool, gamma |- tmt <:> ty, gamma |- tme <:> ty)
 
   0
   inversion : (gamma : Gamma) -> (tty : TypeStatement) -> (typing : gamma |- tty) -> InversionTy gamma tty typing
@@ -154,7 +155,7 @@ namespace Exercise_9_3_1
   inversion gamma (App _ _          <:> _)        (TApp x y)      = (x, y)
   inversion gamma (True             <:> Bool)     TTrue           = MkDPair Bool Refl
   inversion gamma (False            <:> Bool)     TFalse          = MkDPair Bool Refl
-  inversion gamma (IfThenElse _ _ _ <:> _)        (TIf x y z)     = (x, y, z)
+--  inversion gamma (IfThenElse _ _ _ <:> _)        (TIf x y z)     = (x, y, z)
 
 namespace Exercise_9_3_2
 
@@ -172,4 +173,43 @@ namespace Exercise_9_3_2
   uniquenessOfType g (TApp x y)               (TApp z w)  = snd (funInjective (uniquenessOfType g x z))
   uniquenessOfType g TTrue                    TTrue       = Refl
   uniquenessOfType g TFalse                   TFalse      = Refl
-  uniquenessOfType g (TIf x y z)              (TIf w v s) = (uniquenessOfType g y v)
+--  uniquenessOfType g (TIf x y z)              (TIf w v s) = (uniquenessOfType g y v)
+
+namespace Exercise_9_3_4
+
+  public export total 0
+  CanonicalFormTy : (t : Tm) -> (ty : Ty) -> Type
+  CanonicalFormTy t Bool          = Either (t = True) (t = False)
+  CanonicalFormTy t (Fun ty1 ty2) = (var : Name ** (t2 : Tm ** t = Abs var ty1 t2))
+
+  total 0
+  cannoncialFormBool : (t : Tm) -> (gamma |- (t <:> Bool)) -> (v : Value t) -> Either (t = True) (t = False)
+  cannoncialFormBool True   TTrue   True  = Left  Refl
+  cannoncialFormBool False  TFalse  False = Right Refl
+
+  total 0
+  cannonicalFormFun
+    :  (t : Tm) -> (gamma |- (t <:> Fun ty1 ty2)) -> (v : Value t)
+    -> (var : Name ** (t2 : Tm ** t = Abs var ty1 t2))
+  cannonicalFormFun (Abs var ty1 t) (TAbs y) Abs = (var ** (t ** Refl))
+
+  public export total 0
+  cannonicalForms : (t : Tm) -> (ty : Ty) -> (gamma |- (t <:> ty)) -> (v : Value t) -> CanonicalFormTy t ty
+  cannonicalForms t Bool      td v = cannoncialFormBool t td v
+  cannonicalForms t (Fun y z) td v = cannonicalFormFun  t td v
+
+namespace Exercise_9_3_5
+
+  total 0
+  progress : (t : Tm) -> (ty : Ty) -> ([<] |- (t <:> ty)) -> Either (Value t) (t' : Tm ** Evaluation t t')
+  progress (Var xx)         ty            (TVar x)  impossible
+  progress (Abs xx ty1 tm2) (Fun ty1 ty2) (TAbs x)  = Left Abs
+  progress True             Bool          TTrue     = Left True
+  progress False            Bool          TFalse    = Left False
+  progress (App t1 t2) ty (TApp {ty11} t2ty t1ty) = case (progress t1 (Fun ty11 ty) t2ty, progress t2 ty11 t1ty) of
+    ((Left t1Value), (Left t2Value)) => case (cannonicalForms t1 (Fun ty11 ty) t2ty t1Value) of
+        (MkDPair var (MkDPair t' Refl)) => Right (substituition (var, t2) t' ** (EAppAbs t2Value))
+    ((Left t1Value), (Right (MkDPair t' t2Eval))) => Right ((App t1 t') ** EApp2 t1Value t2Eval)
+    ((Right (MkDPair t' t1Eval)), (Left t2Value)) => Right ((App t' t2) ** EApp1 t1Eval)
+    ((Right (MkDPair t' t1Eval)), (Right t2Eval)) => Right ((App t' t2) ** EApp1 t1Eval)
+--  progress (IfThenElse tmp tmt tme) ty (TIf x y z) = ?progress_rhs_6
