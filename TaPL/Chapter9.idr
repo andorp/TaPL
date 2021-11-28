@@ -9,15 +9,17 @@ mutual
   Name : Type
   Name = String
 
-  public export
-  data Tm : Type where
-    Var : (var : Name) -> Tm
-    Abs : (var : Name) -> (ty : Ty) -> (t : Tm) -> Tm
-    App : (tm1, tm2 : Tm) -> Tm
+  namespace SimplyTyped
 
-    True  : Tm
-    False : Tm
---    IfThenElse : (p,t,e : Tm) -> Tm
+    public export
+    data Tm : Type where
+      Var : (var : Name) -> Tm
+      Abs : (var : Name) -> (ty : Ty) -> (t : Tm) -> Tm
+      App : (tm1, tm2 : Tm) -> Tm
+
+      True  : Tm
+      False : Tm
+  --    IfThenElse : (p,t,e : Tm) -> Tm
 
   public export
   data Ty : Type where
@@ -79,23 +81,36 @@ namespace Context
     Here  : InGamma n ty (g :< (n,ty))
     There : (Not (n = m)) -> InGamma n ty g -> InGamma n ty (g :< (m,tz))
 
-data Evaluation : Tm -> Tm -> Type where
+  public export
+  data NotIn : Name -> Gamma -> Type where
+    Nor     : NotIn n Lin
+    Neither : Not (n = m) -> NotIn n g -> NotIn n (g :< (m,t))
 
-  EApp1 :
-            Evaluation t1 t1'        ->
-    -----------------------------------
-    Evaluation (App t1 t2) (App t1' t2)
-  
-  EApp2 :
-                 Value v1          ->
-              Evaluation t t'      ->
-    ---------------------------------            
-    Evaluation (App v1 t) (App v1 t')
+  public export
+  (++) : (sx, sy : Gamma) -> Gamma
+  (++) sx Lin       = sx
+  (++) sx (sy :< y) = (sx ++ sy) :< y
 
-  EAppAbs :
-                          Value v                        ->
-    -------------------------------------------------------
-    Evaluation (App (Abs x ty t) v) (substituition (x,v) t)
+namespace SimplyTyped
+
+  public export
+  data Evaluation : Tm -> Tm -> Type where
+
+    EApp1 :
+              Evaluation t1 t1'        ->
+      -----------------------------------
+      Evaluation (App t1 t2) (App t1' t2)
+    
+    EApp2 :
+                  Value v1          ->
+                Evaluation t t'      ->
+      ---------------------------------            
+      Evaluation (App v1 t) (App v1 t')
+
+    EAppAbs :
+                            Value v                        ->
+      -------------------------------------------------------
+      Evaluation (App (Abs x ty t) v) (substituition (x,v) t)
 
 infix 11 <:>
 
@@ -113,12 +128,12 @@ data (|-) : Gamma -> TypeStatement -> Type where
   
   TAbs :
      (gamma :< (x,ty1)) |- tm2 <:> ty2  ->
-  ----------------------------------------
+  ---------------------------------------- - Introduction rule for Fun
    gamma |- Abs x ty1 tm2 <:> Fun ty1 ty2
 
   TApp :
     (gamma |- tm1 <:> Fun ty11 ty12) -> (gamma |- tm2 <:> ty11) ->
-    --------------------------------------------------------------
+    -------------------------------------------------------------- - Elimination rule for Fun
                     gamma |- App tm1 tm2 <:> ty12
 
   TTrue :
@@ -213,3 +228,134 @@ namespace Exercise_9_3_5
     ((Right (MkDPair t' t1Eval)), (Left t2Value)) => Right ((App t' t2) ** EApp1 t1Eval)
     ((Right (MkDPair t' t1Eval)), (Right t2Eval)) => Right ((App t' t2) ** EApp1 t1Eval)
 --  progress (IfThenElse tmp tmt tme) ty (TIf x y z) = ?progress_rhs_6
+
+namespace Exercise_9_3_6
+
+  -- Inspired by https://www.ben-sherman.net/posts/2014-09-20-quicksort-in-idris.html
+  data Permutation : Gamma -> Gamma -> Type where
+    Empty : Permutation Lin Lin
+    Split : Permutation xs (zs ++ ys) -> Permutation (xs :< x) ((zs :< x) ++ ys)
+    Snoc  : Permutation xs ys -> Permutation (xs :< x) (ys :< x)
+  --  Comp   : Permutation xs ys -> Permutation ys zs -> Permutation xs ys
+  --  Concat : Permutation xs zs -> Permutation ys ws -> Permutation (xs ++ ys) (zs ++ ws)
+
+  thereInGamma : InGamma n t g -> (Not (n = m)) -> InGamma n t (g :< (m,r))
+  thereInGamma x f = There f x
+
+  extendInGamma : InGamma n t g -> (Not (n = m)) -> InGamma n t (g ++ [< (m,r)])
+  extendInGamma x f = There f x
+
+  total
+  extendedGamma : (g,h : Gamma) -> InGamma n t g -> NotIn n h -> InGamma n t (g ++ h)
+  extendedGamma [<]           [<]           x           y             impossible
+  extendedGamma [<]           (g :< (_, _)) x           (Neither f y) = There f (extendedGamma [<] g x y)
+  extendedGamma (g :< z)      [<]           x           y             = x
+  extendedGamma (g :< (_, _)) (w :< (_, _)) Here        (Neither f x) = There f (extendedGamma (g :< (n, t)) w Here x)
+  extendedGamma (g :< (_, _)) (w :< (_, _)) (There f x) (Neither h y) = There h (extendedGamma (g :< (_, _)) w (There f x) y)
+
+  inGammaPermutation : (g1, g2 : Gamma) -> Permutation g1 g2 -> InGamma n t g1 -> InGamma n t g2
+  -- TODO
+  -- inGammaPermutation [<]              [<]                     Empty     Here        impossible
+  -- inGammaPermutation [<]              [<]                     Empty     (There f x) impossible
+  -- inGammaPermutation (xs :< (n, t))   ((zs :< (n, t))  ++ ys) (Split p) Here        = ?inGammaPermutation_rhs_3
+  -- inGammaPermutation (xs :< (m, tz))  ((zs :< (m, tz)) ++ ys) (Split p) (There f y) = ?inGammaPermutation_rhs_4
+
+  export 0
+  permutation : (t : Tm) -> (ty : Ty) -> (g,d : Gamma) -> Permutation g d -> (g |- (t <:> ty)) -> (d |- (t <:> ty))
+  permutation (Var var)         ty            g d perm (TVar deriv)                       = TVar $ inGammaPermutation g d perm deriv
+  permutation (Abs var ty1 tm2) (Fun ty1 ty2) g d perm (TAbs deriv)                       = TAbs (permutation tm2 ty2 (g :< (var,ty1)) (d :< (var,ty1)) (Snoc perm) deriv)
+  permutation (App tm1 tm2)     ty            g d perm (TApp {ty11} derivFun derivParam)  = TApp (permutation tm1 (Fun ty11 ty) g d perm derivFun) (permutation tm2 ty11 g d perm derivParam)
+  permutation True              Bool          g d perm TTrue                              = TTrue
+  permutation False             Bool          g d perm TFalse                             = TFalse
+
+namespace Exercise_9_3_7
+
+  export 0
+  weakening : (g : Gamma) -> (t : Tm) -> (ty : Ty) -> (x : Name) -> (NotIn x g) -> (ty2 : Ty ** (g :< (x,ty2)) |- (t <:> ty))
+
+namespace Exercise_9_3_8
+
+  export 0
+  preservationOfTypes
+    :  (g : Gamma) -> (x : Name) -> (sty, ty : Ty) -> (s,t : Tm)
+    -> ((g :< (x,sty)) |- (t <:> ty)) -> (g |- (s <:> sty)) -> (g |- (substituition (x,s) t) <:> ty)
+
+namespace Theorem_9_3_9
+
+  export 0
+  preservation
+    :  (g : Gamma) -> (t,t' : Tm) -> (ty : Ty)
+    -> (g |- (t <:> ty)) -> Evaluation t t' -> (g |- (t' <:> ty))
+
+namespace Untyped
+
+  public export
+  data Tm : Type where
+    Var   : (var : Name) -> Tm
+    Abs   : (var : Name) -> (t : Untyped.Tm) -> Tm
+    App   : (t1, t2 : Untyped.Tm) -> Tm
+    True  : Tm
+    False : Tm
+
+  -- Substituition assumes unique names, no need for alpha conversions.
+  -- TODO: Check if this right.
+  public export total
+  substituition : (Name, Untyped.Tm) -> Untyped.Tm -> Untyped.Tm
+  substituition (n, tm1) (Var var) = case decEq n var of
+    (Yes prf)   => tm1
+    (No contra) => (Var var)
+  substituition s (Abs var t) = Abs var (substituition s t)
+  substituition s (App t1 t2) = App (substituition s t1) (substituition s t2)
+  substituition s True = True
+  substituition s False = False
+
+  namespace Value
+
+    public export
+    data Value : Untyped.Tm -> Type where
+      Abs   : Value (Abs var t)
+      True  : Value True
+      False : Value False
+
+  public export
+  data Evaluation : Untyped.Tm -> Untyped.Tm -> Type where
+
+    EApp1 :
+              Evaluation t1 t1'        ->
+      -----------------------------------
+      Evaluation (App t1 t2) (App t1' t2)
+    
+    EApp2 :
+                  Value v1          ->
+                Evaluation t t'      ->
+      ---------------------------------            
+      Evaluation (App v1 t) (App v1 t')
+
+    EAppAbs :
+                          Value v                       ->
+      ----------------------------------------------------
+      Evaluation (App (Abs x t) v) (substituition (x,v) t)
+
+total
+erase : SimplyTyped.Tm -> Untyped.Tm
+erase (Var var)       = Var var
+erase (Abs var ty t)  = Abs var (erase t)
+erase (App tm1 tm2)   = App (erase tm1) (erase tm2)
+erase True            = True
+erase False           = False
+
+namespace Theorem_9_5_2
+
+  eraseEval1
+    :  (t,t' : SimplyTyped.Tm)
+    -> SimplyTyped.Evaluation t t' -> Untyped.Evaluation (erase t) (erase t')
+
+  eraseEval2
+    :  (t : SimplyTyped.Tm) -> (m' : Untyped.Tm)
+    -> Untyped.Evaluation (erase t) m' -> (t' : SimplyTyped.Tm ** (SimplyTyped.Evaluation t t', erase t' = m'))
+
+namespace Definition_9_5_3
+
+  public export
+  Typeable : Untyped.Tm -> Type
+  Typeable m = (t : SimplyTyped.Tm ** (ty : Ty ** (g : Gamma ** (erase t = m, g |- (t <:> ty)))))
