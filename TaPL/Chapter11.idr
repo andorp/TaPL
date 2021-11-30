@@ -1,5 +1,6 @@
 module TaPL.Chapter11
 
+import Data.Vect
 import Decidable.Equality
 
 Name : Type
@@ -40,6 +41,7 @@ indexToName : (ctx : Context) -> (i : Nat) -> {auto inCtx : InContext i ctx} -> 
 indexToName (ctx :< b) 0      {inCtx = Here}      = fst b
 indexToName (ctx :< b) (S n)  {inCtx = (There y)} = indexToName ctx n
 
+public export
 addBinding : Name -> Ty -> Context -> Context
 addBinding n ty ctx = ctx :< (n, VarBind ty)
 
@@ -85,6 +87,10 @@ DecEq Ty where
   --   ((No contraXZ), (Yes yIsW)   ) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
   --   ((No contraXZ), (No contraYW)) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
 
+data ForEach : Vect n a -> (p : a -> Type) -> Type where
+  Nil  : ForEach [] p
+  (::) : {xs : Vect n a} -> (p x) -> ForEach xs p -> ForEach (x :: xs) p
+
 namespace Term
 
   public export
@@ -105,6 +111,9 @@ namespace Term
     First  : (fi : Info) -> (t : Tm)                              -> Tm
     Second : (fi : Info) -> (t : Tm)                              -> Tm
 
+    Tuple : (fi : Info) -> (ti : Vect n Tm)                       -> Tm
+    Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)   -> Tm
+
 namespace Value
 
   public export
@@ -114,6 +123,7 @@ namespace Value
     False : Value (False fi)
     Unit  : Value (Unit fi)
     Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
+    Tuple : (n : Nat) -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi tms)
 
 public export
 data Ty : Type where
@@ -122,6 +132,7 @@ data Ty : Type where
   Base : String -> Ty
   Unit : Ty
   Product : Ty -> Ty -> Ty
+  Tuple : (n : Nat) -> Vect n Ty -> Ty
 
 namespace Context
 
@@ -133,11 +144,11 @@ namespace Context
 infix 11 <:>
 
 data TypeStatement : Type where
-  (<:>) : (t1 : Tm) -> (t2 : Ty) -> TypeStatement
+  (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
 
 infix 10 |-
 
-data (|-) : Context -> TypeStatement -> Type where
+data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
   TVar :
       InContext x gamma ->
@@ -199,8 +210,18 @@ data (|-) : Context -> TypeStatement -> Type where
   TProj2 :
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
-         gamma |- Second fi t1 <:> ty1
+         gamma |- Second fi t1 <:> ty2
 
+  TTuple :
+    {n : Nat} -> {ts : Vect n Tm} -> {tys : Vect n Ty} -> {gamma : Context} ->
+          ForEach (ts `zip` tys) (\(t,ty) => gamma |- (t <:> ty))           ->
+    --------------------------------------------------------------------------
+                       gamma |- Tuple fi ts <:> Tuple n tys
+
+  TProj :
+           gamma |- (t <:> Tuple n tys)     ->
+    ------------------------------------------
+    gamma |- (Proj fi t n i) <:> (index i tys)
 
 funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
 funInjective Refl = (Refl, Refl)
@@ -214,59 +235,71 @@ getTypeFromContext fi ctx i = do
       | _ => Error fi "Wrong kind of binding for variable \{indexToName ctx i}"
   pure ty
 
--- covering -- ???
-typeOf : (ctx : Context) -> (t : Tm) -> Infer Ty
-typeOf ctx (True fi)  = pure Bool
-typeOf ctx (False fi) = pure Bool
-typeOf ctx (If fi p t e) = do
-  Bool <- typeOf ctx p
+
+deriveType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
+deriveType ctx (True fi) = pure (Bool ** TTrue)
+deriveType ctx (False fi) = pure (Bool ** TFalse)
+deriveType ctx (If fi p t e) = do
+  (Bool ** pDeriv) <- deriveType ctx p
     | _ => Error fi "guard of conditional is not a Bool"
-  tty <- typeOf ctx t
-  ety <- typeOf ctx e
-  let Yes _ = decEq tty ety
+  (tty ** thenDeriv) <- deriveType ctx t
+  (ety ** elseDeriv) <- deriveType ctx e
+  let Yes tty_is_ety = decEq tty ety
       | No _ => Error fi "arms of conditional have different types"
-  pure tty
-typeOf ctx (Var fi i) = do
+  pure (tty ** TIf pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
+deriveType ctx (Var fi i) = do
   inCtx <- GetInContext ctx i
-  GetTypeFromContext fi ctx i
-typeOf ctx (Abs fi var ty t) = do
-  ctx' <- AddBinding var ty ctx
-  ty2 <- typeOf ctx' t
-  pure $ Arr ty ty2
-typeOf ctx (App fi t1 t2) = do
-  ty1 <- typeOf ctx t1
-  ty2 <- typeOf ctx t2
+  ty <- GetTypeFromContext fi ctx i
+  pure (ty ** (TVar inCtx))
+deriveType ctx (Abs fi var ty t) = do
+  (ty2 ** tDeriv) <- deriveType (addBinding var ty ctx) t
+  pure (Arr ty ty2 ** TAbs tDeriv)
+deriveType ctx (App fi t1 t2) = do
+  (ty1 ** t1Deriv) <- deriveType ctx t1
+  (ty2 ** t2Deriv) <- deriveType ctx t2
   case ty1 of
     Arr aty1 aty2 => case decEq ty2 aty1 of
-      Yes _ => pure aty2
-      No  _ => Error fi "parameter type mismatch"
+      Yes t2_is_aty2
+        => pure (aty2 ** TApp t1Deriv (rewrite (sym t2_is_aty2) in t2Deriv))
+      No _
+        => Error fi "parameter type mismatch"
     _ => Error fi "arrow type expected"
-typeOf ctx (Unit fi) = pure Unit
-typeOf ctx (Seq fi t1 t2) = do
-  Unit <- typeOf ctx t1
+deriveType ctx (Unit fi) = pure (Unit ** TUnit)
+deriveType ctx (Seq fi t1 t2) = do
+  (Unit ** t1Deriv) <- deriveType ctx t1
     | _ => Error fi "First arm of sequence doesn't have Unit type"
-  typeOf ctx t2
-typeOf ctx (As fi t1 ty) = do
-  ty1 <- typeOf ctx t1
-  case decEq ty1 ty of
-    Yes _ => pure ty
-    No _ => Error fi "Found type is different than ascribed type"
-typeOf ctx (Let fi x t b) = do
-  ty1 <- typeOf ctx t
-  ctx' <- AddBinding x ty1 ctx
-  typeOf ctx b
-typeOf ctx (Pair fi t1 t2) = do
-  ty1 <- typeOf ctx t1
-  ty2 <- typeOf ctx t2
-  pure $ Product ty1 ty2
-typeOf ctx (First fi t) = do
-  Product ty1 ty2 <- typeOf ctx t
+  (ty2 ** t2Deriv) <- deriveType ctx t2
+  pure (ty2 ** TSeq t1Deriv t2Deriv)
+deriveType ctx (As fi t ty) = do
+  (ty1 ** tDeriv) <- deriveType ctx t
+  case decEq ty ty1 of
+    Yes ty_is_ty1 => pure (ty ** TAscribe (rewrite ty_is_ty1 in tDeriv))
+    No  _         => Error fi "Found type is different than ascribed type"
+deriveType ctx (Let fi n t b) = do
+  (ty1 ** tDeriv) <- deriveType ctx t
+  (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
+  pure $ (ty2 ** TLet tDeriv bDeriv)
+deriveType ctx (Pair fi t1 t2) = do
+  (ty1 ** t1Deriv) <- deriveType ctx t1
+  (ty2 ** t2Deriv) <- deriveType ctx t2
+  pure $ (Product ty1 ty2 ** TPair t1Deriv t2Deriv)
+deriveType ctx (First fi t) = do
+  (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
     | _ => Error fi "Found type is different than product"
-  pure ty1
-typeOf ctx (Second fi t) = do
-  Product ty1 ty2 <- typeOf ctx t
+  pure (ty1 ** TProj1 tDeriv)
+deriveType ctx (Second fi t) = do
+  (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
     | _ => Error fi "Found type is different than product"
-  pure ty2
+  pure (ty2 ** TProj2 tDeriv)
+deriveType ctx (Tuple fi ti) = do
+  -- TODO: Create foreach...
+  ?deriveType_rhs_14
+deriveType ctx (Proj fi t n idx) = do
+  (Tuple m tys ** tDeriv) <- deriveType ctx t
+  let Yes n_is_m = decEq n m
+       | No _ => Error fi "Tuple have different arity than expected"
+  pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj (rewrite n_is_m in tDeriv)))
+
 
 -- typeOf : (ctx : Context) -> (t : Tm) -> Infer Ty
 
@@ -339,7 +372,7 @@ data Evaluation : Tm -> Tm -> Type where
     -------------------------------------------
     Evaluation (Second fi1 (Pair fi2 v1 v2)) v2
 
-  EProf1 :
+  EProj1 :
                Evaluation t t'         ->
     -------------------------------------
     Evaluation (First fi t) (First fi t')
@@ -359,3 +392,19 @@ data Evaluation : Tm -> Tm -> Type where
                  Evaluation t2 t2'           ->
     -------------------------------------------
     Evaluation (Pair fi t1 t2) (Pair fi t1 t2')
+
+  EProjTuple :
+                  Value (Tuple fi2 tms)                  ->
+    -------------------------------------------------------
+    Evaluation (Proj fi1 (Tuple fi2 tms) n j) (index j tms)
+
+  EProj :
+                  Evaluation t t'            ->
+    -------------------------------------------
+    Evaluation (Proj fi t n i) (Proj fi t' n i)
+
+  ETuple :
+                    ForEach vs Value -> Evaluation t t'                ->
+    ---------------------------------------------------------------------
+    Evaluation (Tuple fi (vs ++ (t :: ts))) (Tuple fi (vs ++ (t' :: ts)))
+
