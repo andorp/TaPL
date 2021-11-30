@@ -46,8 +46,9 @@ addBinding n ty ctx = ctx :< (n, VarBind ty)
 data Eval : Type -> Type where
   Pure : a -> Eval a
   Bind : Eval a -> (a -> Eval b) -> Eval b
-
+  
   Error : {a : Type} -> Info -> String -> Eval a
+
   GetTypeFromContext : Info -> (ctx : Context) -> (i : Nat) -> (InContext i ctx) => Eval Ty
   GetInContext : (ctx : Context) -> (i : Nat) -> Eval (InContext i ctx)
   AddBinding : Name -> Ty -> Context -> Eval Context
