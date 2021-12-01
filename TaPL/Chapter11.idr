@@ -6,15 +6,14 @@ import Decidable.Equality
 Name : Type
 Name = String
 
-infix 10 |-
-infix 11 <:>
-
+data Info : Type
 data Ty : Type
-data Info  : Type
 data Context : Type
 data TypeStatement : Type
 data (|-) : (0 _ : Context) -> TypeStatement -> Type
 
+infix 10 |-
+infix 11 <:>
 
 data Binding : Type where
   NameBind : Binding
@@ -156,7 +155,6 @@ namespace TupleFields
   data TupleFields : Context -> Vect n Tm -> Vect n Ty -> Type where
     Nil  : TupleFields ctx [] []
     (::) : TupleFieldInfo ctx t ty -> TupleFields ctx ts tys -> TupleFields ctx (t :: ts) (ty :: tys)
-
 
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
