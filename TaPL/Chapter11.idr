@@ -6,8 +6,15 @@ import Decidable.Equality
 Name : Type
 Name = String
 
+infix 10 |-
+infix 11 <:>
+
 data Ty : Type
 data Info  : Type
+data Context : Type
+data TypeStatement : Type
+data (|-) : (0 _ : Context) -> TypeStatement -> Type
+
 
 data Binding : Type where
   NameBind : Binding
@@ -54,11 +61,13 @@ data Infer : Type -> Type where
   GetInContext : (ctx : Context) -> (i : Nat) -> Infer (InContext i ctx)
   AddBinding : Name -> Ty -> Context -> Infer Context
 
-(>>=) : Infer a -> (a -> Infer b) -> Infer b
-(>>=) = Bind
+namespace InferMonad
 
-pure : a -> Infer a
-pure = Pure
+  (>>=) : Infer a -> (a -> Infer b) -> Infer b
+  (>>=) = Bind
+
+  pure : a -> Infer a
+  pure = Pure
 
 Functor Infer where
   map f m = Bind m (\a => Pure (f a))
@@ -111,7 +120,7 @@ namespace Term
     First  : (fi : Info) -> (t : Tm)                              -> Tm
     Second : (fi : Info) -> (t : Tm)                              -> Tm
 
-    Tuple : (fi : Info) -> (ti : Vect n Tm)                       -> Tm
+    Tuple : (fi : Info) -> {n : Nat} -> (ti : Vect n Tm)          -> Tm
     Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)   -> Tm
 
 namespace Value
@@ -134,91 +143,91 @@ data Ty : Type where
   Product : Ty -> Ty -> Ty
   Tuple : (n : Nat) -> Vect n Ty -> Ty
 
-namespace Context
-
-  public export
-  data InGamma : Name -> Ty -> Context -> Type where
-    Here  : InGamma n ty (g :< (n,VarBind ty))
-    There : (Not (n = m)) -> InGamma n ty g -> InGamma n ty (g :< (m,VarBind tz))
-
-infix 11 <:>
-
 data TypeStatement : Type where
   (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
 
-infix 10 |-
+namespace TupleFields
+
+  public export
+  data TupleFieldInfo : Context -> Tm -> Ty -> Type where
+    MkTupleFieldInfo : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TupleFieldInfo ctx t ty
+
+  public export
+  data TupleFields : Context -> Vect n Tm -> Vect n Ty -> Type where
+    Nil  : TupleFields ctx [] []
+    (::) : TupleFieldInfo ctx t ty -> TupleFields ctx ts tys -> TupleFields ctx (t :: ts) (ty :: tys)
+
 
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
-  TVar :
-      InContext x gamma ->
-    -----------------------
+  TVar : Info ->
+       InContext x gamma ->
+    -------------------------
      gamma |- Var fi x <:> ty
   
-  TAbs :
+  TAbs : Info ->
      (gamma :< (x,VarBind ty1)) |- tm2 <:> ty2  ->
-  ---------------------------------------- - Introduction rule for Arr
+  ------------------------------------------------ - Introduction rule for Arr
    gamma |- Abs fi1 x ty1 tm2 <:> Arr ty1 ty2
 
-  TApp :
+  TApp : Info ->
     (gamma |- tm1 <:> Arr ty11 ty12) -> (gamma |- tm2 <:> ty11) ->
     -------------------------------------------------------------- - Elimination rule for Arr
                     gamma |- App fi tm1 tm2 <:> ty12
 
-  TTrue :
-    ----------------------
+  TTrue : Info ->
+    -------------------------
     gamma |- True fi <:> Bool
 
-  TFalse :
-    -----------------------
+  TFalse : Info ->
+    --------------------------
     gamma |- False fi <:> Bool
 
-  TIf :
+  TIf : Info ->
     (gamma |- tmp <:> Bool) -> (gamma |- tmt <:> ty) -> (gamma |- tme <:> ty) ->
     ----------------------------------------------------------------------------
                      gamma |- (If fi tmp tmt tme <:> ty)
 
-  TUnit :
+  TUnit : Info ->
     -------------------------
     gamma |- Unit fi <:> Unit
 
-  TSeq :
+  TSeq : Info ->
     (gamma |- t1 <:> Unit) -> (gamma |- t2 <:> ty2) ->
     --------------------------------------------------
             gamma |- Seq fi t1 t2 <:> ty2
 
-  TAscribe :
+  TAscribe : Info ->
         (gamma |- t1 <:> ty1)  ->
     -----------------------------
     gamma |- As fi t1 ty1 <:> ty1
 
-  TLet :
+  TLet : Info ->
     (gamma |- (t1 <:> ty1)) -> ((gamma :< (x,VarBind ty1)) |- t2 <:> ty2) ->
     ------------------------------------------------------------------------
                        gamma |- Let fi x t1 t2 <:> ty2
 
-  TPair :
+  TPair : Info ->
     (gamma |- (t1 <:> ty1)) -> (gamma |- (t2 <:> ty2)) ->
     -----------------------------------------------------
           gamma |- Pair fi t1 t2 <:> Product ty1 ty2
 
-  TProj1 :
+  TProj1 : Info ->
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
           gamma |- First fi t1 <:> ty1
 
-  TProj2 :
+  TProj2 : Info ->
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
          gamma |- Second fi t1 <:> ty2
 
-  TTuple :
-    {n : Nat} -> {ts : Vect n Tm} -> {tys : Vect n Ty} -> {gamma : Context} ->
-          ForEach (ts `zip` tys) (\(t,ty) => gamma |- (t <:> ty))           ->
-    --------------------------------------------------------------------------
-                       gamma |- Tuple fi ts <:> Tuple n tys
+  TTuple : Info ->
+         TupleFields gamma ts tys     ->
+    ------------------------------------
+    gamma |- Tuple fi ts <:> Tuple n tys
 
-  TProj :
+  TProj : Info ->
            gamma |- (t <:> Tuple n tys)     ->
     ------------------------------------------
     gamma |- (Proj fi t n i) <:> (index i tys)
@@ -235,71 +244,78 @@ getTypeFromContext fi ctx i = do
       | _ => Error fi "Wrong kind of binding for variable \{indexToName ctx i}"
   pure ty
 
+mutual
 
-deriveType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
-deriveType ctx (True fi) = pure (Bool ** TTrue)
-deriveType ctx (False fi) = pure (Bool ** TFalse)
-deriveType ctx (If fi p t e) = do
-  (Bool ** pDeriv) <- deriveType ctx p
-    | _ => Error fi "guard of conditional is not a Bool"
-  (tty ** thenDeriv) <- deriveType ctx t
-  (ety ** elseDeriv) <- deriveType ctx e
-  let Yes tty_is_ety = decEq tty ety
-      | No _ => Error fi "arms of conditional have different types"
-  pure (tty ** TIf pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
-deriveType ctx (Var fi i) = do
-  inCtx <- GetInContext ctx i
-  ty <- GetTypeFromContext fi ctx i
-  pure (ty ** (TVar inCtx))
-deriveType ctx (Abs fi var ty t) = do
-  (ty2 ** tDeriv) <- deriveType (addBinding var ty ctx) t
-  pure (Arr ty ty2 ** TAbs tDeriv)
-deriveType ctx (App fi t1 t2) = do
-  (ty1 ** t1Deriv) <- deriveType ctx t1
-  (ty2 ** t2Deriv) <- deriveType ctx t2
-  case ty1 of
-    Arr aty1 aty2 => case decEq ty2 aty1 of
-      Yes t2_is_aty2
-        => pure (aty2 ** TApp t1Deriv (rewrite (sym t2_is_aty2) in t2Deriv))
-      No _
-        => Error fi "parameter type mismatch"
-    _ => Error fi "arrow type expected"
-deriveType ctx (Unit fi) = pure (Unit ** TUnit)
-deriveType ctx (Seq fi t1 t2) = do
-  (Unit ** t1Deriv) <- deriveType ctx t1
-    | _ => Error fi "First arm of sequence doesn't have Unit type"
-  (ty2 ** t2Deriv) <- deriveType ctx t2
-  pure (ty2 ** TSeq t1Deriv t2Deriv)
-deriveType ctx (As fi t ty) = do
-  (ty1 ** tDeriv) <- deriveType ctx t
-  case decEq ty ty1 of
-    Yes ty_is_ty1 => pure (ty ** TAscribe (rewrite ty_is_ty1 in tDeriv))
-    No  _         => Error fi "Found type is different than ascribed type"
-deriveType ctx (Let fi n t b) = do
-  (ty1 ** tDeriv) <- deriveType ctx t
-  (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
-  pure $ (ty2 ** TLet tDeriv bDeriv)
-deriveType ctx (Pair fi t1 t2) = do
-  (ty1 ** t1Deriv) <- deriveType ctx t1
-  (ty2 ** t2Deriv) <- deriveType ctx t2
-  pure $ (Product ty1 ty2 ** TPair t1Deriv t2Deriv)
-deriveType ctx (First fi t) = do
-  (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
-    | _ => Error fi "Found type is different than product"
-  pure (ty1 ** TProj1 tDeriv)
-deriveType ctx (Second fi t) = do
-  (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
-    | _ => Error fi "Found type is different than product"
-  pure (ty2 ** TProj2 tDeriv)
-deriveType ctx (Tuple fi ti) = do
-  -- TODO: Create foreach...
-  ?deriveType_rhs_14
-deriveType ctx (Proj fi t n idx) = do
-  (Tuple m tys ** tDeriv) <- deriveType ctx t
-  let Yes n_is_m = decEq n m
-       | No _ => Error fi "Tuple have different arity than expected"
-  pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj (rewrite n_is_m in tDeriv)))
+  deriveType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
+  deriveType ctx (True fi) = pure (Bool ** TTrue fi)
+  deriveType ctx (False fi) = pure (Bool ** TFalse fi)
+  deriveType ctx (If fi p t e) = do
+    (Bool ** pDeriv) <- deriveType ctx p
+      | _ => Error fi "guard of conditional is not a Bool"
+    (tty ** thenDeriv) <- deriveType ctx t
+    (ety ** elseDeriv) <- deriveType ctx e
+    let Yes tty_is_ety = decEq tty ety
+        | No _ => Error fi "arms of conditional have different types"
+    pure (tty ** TIf fi pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
+  deriveType ctx (Var fi i) = do
+    inCtx <- GetInContext ctx i
+    ty <- GetTypeFromContext fi ctx i
+    pure (ty ** (TVar fi inCtx))
+  deriveType ctx (Abs fi var ty t) = do
+    (ty2 ** tDeriv) <- deriveType (addBinding var ty ctx) t
+    pure (Arr ty ty2 ** TAbs fi tDeriv)
+  deriveType ctx (App fi t1 t2) = do
+    (ty1 ** t1Deriv) <- deriveType ctx t1
+    (ty2 ** t2Deriv) <- deriveType ctx t2
+    case ty1 of
+      Arr aty1 aty2 => case decEq ty2 aty1 of
+        Yes t2_is_aty2
+          => pure (aty2 ** TApp fi t1Deriv (rewrite (sym t2_is_aty2) in t2Deriv))
+        No _
+          => Error fi "parameter type mismatch"
+      _ => Error fi "arrow type expected"
+  deriveType ctx (Unit fi) = pure (Unit ** TUnit fi)
+  deriveType ctx (Seq fi t1 t2) = do
+    (Unit ** t1Deriv) <- deriveType ctx t1
+      | _ => Error fi "First arm of sequence doesn't have Unit type"
+    (ty2 ** t2Deriv) <- deriveType ctx t2
+    pure (ty2 ** TSeq fi t1Deriv t2Deriv)
+  deriveType ctx (As fi t ty) = do
+    (ty1 ** tDeriv) <- deriveType ctx t
+    case decEq ty ty1 of
+      Yes ty_is_ty1 => pure (ty ** TAscribe fi (rewrite ty_is_ty1 in tDeriv))
+      No  _         => Error fi "Found type is different than ascribed type"
+  deriveType ctx (Let fi n t b) = do
+    (ty1 ** tDeriv) <- deriveType ctx t
+    (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
+    pure $ (ty2 ** TLet fi tDeriv bDeriv)
+  deriveType ctx (Pair fi t1 t2) = do
+    (ty1 ** t1Deriv) <- deriveType ctx t1
+    (ty2 ** t2Deriv) <- deriveType ctx t2
+    pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
+  deriveType ctx (First fi t) = do
+    (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
+      | _ => Error fi "Found type is different than product"
+    pure (ty1 ** TProj1 fi tDeriv)
+  deriveType ctx (Second fi t) = do
+    (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
+      | _ => Error fi "Found type is different than product"
+    pure (ty2 ** TProj2 fi tDeriv)
+  deriveType ctx (Tuple {n} fi tms) = do
+    (tys ** tty) <- deriveTupleTypes ctx tms
+    pure (Tuple n tys ** TTuple fi tty)
+  deriveType ctx (Proj fi t n idx) = do
+    (Tuple m tys ** tDeriv) <- deriveType ctx t
+    let Yes n_is_m = decEq n m
+        | No _ => Error fi "Tuple have different arity than expected"
+    pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj fi (rewrite n_is_m in tDeriv)))
 
+  deriveTupleTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** TupleFields ctx tms tys)
+  deriveTupleTypes ctx [] = pure ([] ** [])
+  deriveTupleTypes ctx (t :: ts) = do
+    (ty  ** tDeriv) <- deriveType       ctx t
+    (tys ** fields) <- deriveTupleTypes ctx ts
+    pure (ty :: tys ** (MkTupleFieldInfo t ty tDeriv) :: fields)
 
 -- typeOf : (ctx : Context) -> (t : Tm) -> Infer Ty
 
