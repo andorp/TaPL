@@ -120,7 +120,7 @@ namespace Term
     First  : (fi : Info) -> (t : Tm)                              -> Tm
     Second : (fi : Info) -> (t : Tm)                              -> Tm
 
-    Tuple : (fi : Info) -> {n : Nat} -> (ti : Vect n Tm)          -> Tm
+    Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)          -> Tm
     Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)   -> Tm
 
 namespace Value
@@ -132,7 +132,7 @@ namespace Value
     False : Value (False fi)
     Unit  : Value (Unit fi)
     Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
-    Tuple : (n : Nat) -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi tms)
+    Tuple : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
 
 public export
 data Ty : Type where
@@ -223,9 +223,9 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
          gamma |- Second fi t1 <:> ty2
 
   TTuple : Info ->
-         TupleFields gamma ts tys     ->
-    ------------------------------------
-    gamma |- Tuple fi ts <:> Tuple n tys
+          TupleFields gamma ts tys      ->
+    --------------------------------------
+    gamma |- Tuple fi n ts <:> Tuple n tys
 
   TProj : Info ->
            gamma |- (t <:> Tuple n tys)     ->
@@ -301,7 +301,7 @@ mutual
     (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
       | _ => Error fi "Found type is different than product"
     pure (ty2 ** TProj2 fi tDeriv)
-  deriveType ctx (Tuple {n} fi tms) = do
+  deriveType ctx (Tuple fi n tms) = do
     (tys ** tty) <- deriveTupleTypes ctx tms
     pure (Tuple n tys ** TTuple fi tty)
   deriveType ctx (Proj fi t n idx) = do
@@ -410,9 +410,9 @@ data Evaluation : Tm -> Tm -> Type where
     Evaluation (Pair fi t1 t2) (Pair fi t1 t2')
 
   EProjTuple :
-                  Value (Tuple fi2 tms)                  ->
-    -------------------------------------------------------
-    Evaluation (Proj fi1 (Tuple fi2 tms) n j) (index j tms)
+                   Value (Tuple fi2 n tms)                 ->
+    ---------------------------------------------------------
+    Evaluation (Proj fi1 (Tuple fi2 n tms) n j) (index j tms)
 
   EProj :
                   Evaluation t t'            ->
@@ -420,7 +420,7 @@ data Evaluation : Tm -> Tm -> Type where
     Evaluation (Proj fi t n i) (Proj fi t' n i)
 
   ETuple :
-                    ForEach vs Value -> Evaluation t t'                ->
-    ---------------------------------------------------------------------
-    Evaluation (Tuple fi (vs ++ (t :: ts))) (Tuple fi (vs ++ (t' :: ts)))
-
+                  {n,m : Nat} -> {vs : Vect n Tm} -> {t : Tm} -> {ts : Vect m Tm}                  ->
+                                ForEach vs Value -> Evaluation t t'                                ->
+    -------------------------------------------------------------------------------------------------
+    Evaluation (Tuple fi (n + (1 + m)) (vs ++ (t :: ts))) (Tuple fi (n + (1 + m)) (vs ++ (t' :: ts)))
