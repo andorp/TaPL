@@ -11,6 +11,7 @@ data Ty : Type
 data Context : Type
 data TypeStatement : Type
 data (|-) : (0 _ : Context) -> TypeStatement -> Type
+data TypeDerivation : Type
 
 infix 10 |-
 infix 11 <:>
@@ -55,7 +56,7 @@ data Infer : Type -> Type where
   Pure : a -> Infer a
   Bind : Infer a -> (a -> Infer b) -> Infer b
 
-  Error : {a : Type} -> Info -> String -> Infer a
+  Error : {a : Type} -> Info -> List TypeDerivation -> String -> Infer a
   GetTypeFromContext : Info -> (ctx : Context) -> (i : Nat) -> (InContext i ctx) => Infer Ty
   GetInContext : (ctx : Context) -> (i : Nat) -> Infer (InContext i ctx)
   AddBinding : Name -> Ty -> Context -> Infer Context
@@ -239,8 +240,14 @@ Uninhabited (Arr _ _ = Bool) where uninhabited _ impossible
 getTypeFromContext : Info -> (ctx : Context) -> (i : Nat) -> (InContext i ctx) => Infer Ty
 getTypeFromContext fi ctx i = do
   let VarBind ty = getBinding fi ctx i
-      | _ => Error fi "Wrong kind of binding for variable \{indexToName ctx i}"
+      | _ => Error fi [] "Wrong kind of binding for variable \{indexToName ctx i}"
   pure ty
+
+data TypeDerivation : Type where
+  MkTypeDerivation : (0 ctx : Context) -> (0 t : Tm) -> (0 ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TypeDerivation
+
+mkTD : (ctx |- t <:> ty) -> TypeDerivation
+mkTD deriv = MkTypeDerivation ctx t ty deriv
 
 mutual
 
@@ -249,11 +256,11 @@ mutual
   deriveType ctx (False fi) = pure (Bool ** TFalse fi)
   deriveType ctx (If fi p t e) = do
     (Bool ** pDeriv) <- deriveType ctx p
-      | _ => Error fi "guard of conditional is not a Bool"
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "guard of conditional is not a Bool"
     (tty ** thenDeriv) <- deriveType ctx t
     (ety ** elseDeriv) <- deriveType ctx e
     let Yes tty_is_ety = decEq tty ety
-        | No _ => Error fi "arms of conditional have different types"
+        | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
     pure (tty ** TIf fi pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
   deriveType ctx (Var fi i) = do
     inCtx <- GetInContext ctx i
@@ -270,19 +277,19 @@ mutual
         Yes t2_is_aty2
           => pure (aty2 ** TApp fi t1Deriv (rewrite (sym t2_is_aty2) in t2Deriv))
         No _
-          => Error fi "parameter type mismatch"
-      _ => Error fi "arrow type expected"
+          => Error fi [mkTD t2Deriv] "parameter type mismatch"
+      _ => Error fi [mkTD t1Deriv] "arrow type expected"
   deriveType ctx (Unit fi) = pure (Unit ** TUnit fi)
   deriveType ctx (Seq fi t1 t2) = do
     (Unit ** t1Deriv) <- deriveType ctx t1
-      | _ => Error fi "First arm of sequence doesn't have Unit type"
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "First arm of sequence doesn't have Unit type"
     (ty2 ** t2Deriv) <- deriveType ctx t2
     pure (ty2 ** TSeq fi t1Deriv t2Deriv)
   deriveType ctx (As fi t ty) = do
     (ty1 ** tDeriv) <- deriveType ctx t
     case decEq ty ty1 of
       Yes ty_is_ty1 => pure (ty ** TAscribe fi (rewrite ty_is_ty1 in tDeriv))
-      No  _         => Error fi "Found type is different than ascribed type"
+      No  _         => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
   deriveType ctx (Let fi n t b) = do
     (ty1 ** tDeriv) <- deriveType ctx t
     (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
@@ -293,11 +300,11 @@ mutual
     pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
   deriveType ctx (First fi t) = do
     (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
-      | _ => Error fi "Found type is different than product"
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
     pure (ty1 ** TProj1 fi tDeriv)
   deriveType ctx (Second fi t) = do
     (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
-      | _ => Error fi "Found type is different than product"
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
     pure (ty2 ** TProj2 fi tDeriv)
   deriveType ctx (Tuple fi n tms) = do
     (tys ** tty) <- deriveTupleTypes ctx tms
@@ -305,7 +312,7 @@ mutual
   deriveType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- deriveType ctx t
     let Yes n_is_m = decEq n m
-        | No _ => Error fi "Tuple have different arity than expected"
+        | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
     pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj fi (rewrite n_is_m in tDeriv)))
 
   deriveTupleTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** TupleFields ctx tms tys)
