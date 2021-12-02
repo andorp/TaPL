@@ -17,36 +17,36 @@ infix 10 |-
 infix 11 <:>
 
 data Binding : Type where
-  NameBind : Binding
   VarBind  : (ty : Ty) -> Binding
 
 data Context : Type where
   Lin  : Context
   (:<) : Context -> (Name, Binding) -> Context
 
-data InContext : Nat -> Context -> Type where
-  Here  : InContext 0 (ctx :< b)
-  There : InContext n ctx -> InContext (S n) (ctx :< b)
+data InContext : Nat -> Ty -> Context -> Type where
+  Here  : InContext 0 ty (ctx :< (n, VarBind ty))
+  There : InContext n ty ctx -> InContext (S n) ty (ctx :< b)
 
-Uninhabited (InContext 0     Lin) where uninhabited _ impossible
-Uninhabited (InContext (S _) Lin) where uninhabited _ impossible
+Uninhabited (InContext 0     _ Lin) where uninhabited _ impossible
+Uninhabited (InContext (S _) _ Lin) where uninhabited _ impossible
 
 total
-thereInjective : InContext (S n) (ctx :< b) -> InContext n ctx
+thereInjective : InContext (S n) ty (ctx :< b) -> InContext n ty ctx
 thereInjective (There x) = x
 
 total
-inContext : (ctx : Context) -> (i : Nat) -> Dec (InContext i ctx)
-inContext [<]       0     = No uninhabited
-inContext [<]       (S k) = No uninhabited
-inContext (x :< y)  0     = Yes Here
-inContext (x :< y)  (S k) = case inContext x k of
-  (Yes found) => Yes $ There found
-  (No contra) => No (\assumeFound => contra (thereInjective assumeFound))
+inContext : (ctx : Context) -> (i : Nat) -> Dec (ty : Ty ** InContext i ty ctx)
+inContext [<] 0                     = No (\inCtxt => uninhabited (snd inCtxt))
+inContext [<] (S k)                 = No (\inCtxt => uninhabited (snd inCtxt))
+inContext (x :< (y, (VarBind t))) 0 = Yes (t ** Here)
+inContext (x :< y) (S k)            = case inContext x k of
+  Yes   found => Yes (case found of { (ty ** there) => (ty ** There there) })
+  No notFound => No (\(ty ** there) => notFound (ty ** thereInjective there))
 
-indexToName : (ctx : Context) -> (i : Nat) -> {auto inCtx : InContext i ctx} -> Name
-indexToName (ctx :< b) 0      {inCtx = Here}      = fst b
-indexToName (ctx :< b) (S n)  {inCtx = (There y)} = indexToName ctx n
+total
+indexToName : (ctx : Context) -> (i : Nat) -> (inCtx : InContext i ty ctx) -> Name
+indexToName (ctx :< (n, VarBind ty))  0     Here      = n
+indexToName (ctx :< b)                (S n) (There x) = indexToName ctx n x
 
 public export
 addBinding : Name -> Ty -> Context -> Context
@@ -55,11 +55,7 @@ addBinding n ty ctx = ctx :< (n, VarBind ty)
 data Infer : Type -> Type where
   Pure : a -> Infer a
   Bind : Infer a -> (a -> Infer b) -> Infer b
-
   Error : {a : Type} -> Info -> List TypeDerivation -> String -> Infer a
-  GetTypeFromContext : Info -> (ctx : Context) -> (i : Nat) -> (InContext i ctx) => Infer Ty
-  GetInContext : (ctx : Context) -> (i : Nat) -> Infer (InContext i ctx)
-  AddBinding : Name -> Ty -> Context -> Infer Context
 
 namespace InferMonad
 
@@ -80,10 +76,9 @@ Monad Infer where
   join m  = Bind m id
   m >>= k = Bind m k
 
-getBinding : Info -> (ctx : Context) -> (i : Nat) -> {auto inCtx : InContext i ctx} -> Binding
-getBinding fi (ctx :< b) 0     {inCtx = Here}      = snd b
-getBinding fi (ctx :< b) (S n) {inCtx = (There x)} = getBinding fi ctx n
-
+getBinding : Info -> (ctx : Context) -> (i : Nat) -> (inCtx : InContext i ty ctx) -> Binding
+getBinding fi (ctx :< (n, VarBind ty)) 0     Here      = VarBind ty
+getBinding fi (ctx :< b)               (S n) (There x) = getBinding fi ctx n x
 
 DecEq Ty where
   decEq _ _ = ?h1
@@ -99,6 +94,33 @@ DecEq Ty where
 data ForEach : Vect n a -> (p : a -> Type) -> Type where
   Nil  : ForEach [] p
   (::) : {xs : Vect n a} -> (p x) -> ForEach xs p -> ForEach (x :: xs) p
+
+namespace Record
+
+  namespace NotInt
+  
+    public export
+    data NotIn : String -> Vect n String -> Type where
+      Nil  : NotIn n []
+      (::) : Not (n = f) -> NotIn n fs -> NotIn n (f :: fs)
+
+  public export
+  data UniqueFields : Vect n String -> Type where
+    Nil  : UniqueFields []
+    (::) : NotIn f fs -> UniqueFields fs -> UniqueFields (f :: fs)
+
+  public export
+  record Record (a : Type) where
+    constructor MkRecord
+    size   : Nat
+    fields : Vect size String
+    values : Vect size a
+    0 uniqueFields : UniqueFields fields
+
+  public export
+  data InRecord : String -> a -> Vect n String -> Vect n a -> Type where
+    Here  : InRecord f x (f :: fs) (x :: xs)
+    There : InRecord f x fs xs -> InRecord f x (g :: fs) (y :: xs)
 
 namespace Term
 
@@ -123,6 +145,9 @@ namespace Term
     Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)          -> Tm
     Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)   -> Tm
 
+    Record : (fi : Info) -> (Record.Record Tm)                    -> Tm
+    ProjField : (fi : Info) -> (field : String) -> (t : Tm)       -> Tm
+
 namespace Value
 
   public export
@@ -133,6 +158,7 @@ namespace Value
     Unit  : Value (Unit fi)
     Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
     Tuple : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
+    Record : {n : Nat} -> (r : Record Tm) -> ForEach r.values Value -> Value (Record fi r) 
 
 public export
 data Ty : Type where
@@ -142,36 +168,37 @@ data Ty : Type where
   Unit : Ty
   Product : Ty -> Ty -> Ty
   Tuple : (n : Nat) -> Vect n Ty -> Ty
+  Record : (r : Record Ty) -> Ty
 
 data TypeStatement : Type where
   (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
 
-namespace TupleFields
+namespace DerivList
 
   public export
-  data TupleFieldInfo : Context -> Tm -> Ty -> Type where
-    MkTupleFieldInfo : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TupleFieldInfo ctx t ty
+  data Derivation : Context -> Tm -> Ty -> Type where
+    MkDerivation : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> Derivation ctx t ty
 
   public export
-  data TupleFields : Context -> Vect n Tm -> Vect n Ty -> Type where
-    Nil  : TupleFields ctx [] []
-    (::) : TupleFieldInfo ctx t ty -> TupleFields ctx ts tys -> TupleFields ctx (t :: ts) (ty :: tys)
+  data Derivations : Context -> Vect n Tm -> Vect n Ty -> Type where
+    Nil  : Derivations ctx [] []
+    (::) : Derivation ctx t ty -> Derivations ctx ts tys -> Derivations ctx (t :: ts) (ty :: tys)
 
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
   TVar : Info ->
-       InContext x gamma ->
-    -------------------------
+      InContext x ty gamma  ->
+    --------------------------
      gamma |- Var fi x <:> ty
   
-  TAbs : Info ->
+  TAbs : Info -> -- Introduction rule for Arr
      (gamma :< (x,VarBind ty1)) |- tm2 <:> ty2  ->
-  ------------------------------------------------ - Introduction rule for Arr
+  ------------------------------------------------ 
    gamma |- Abs fi1 x ty1 tm2 <:> Arr ty1 ty2
 
-  TApp : Info ->
+  TApp : Info -> -- Elimination rule for Arr
     (gamma |- tm1 <:> Arr ty11 ty12) -> (gamma |- tm2 <:> ty11) ->
-    -------------------------------------------------------------- - Elimination rule for Arr
+    -------------------------------------------------------------- 
                     gamma |- App fi tm1 tm2 <:> ty12
 
   TTrue : Info ->
@@ -222,26 +249,31 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
          gamma |- Second fi t1 <:> ty2
 
   TTuple : Info ->
-          TupleFields gamma ts tys      ->
+          Derivations gamma ts tys      ->
     --------------------------------------
     gamma |- Tuple fi n ts <:> Tuple n tys
 
   TProj : Info ->
-           gamma |- (t <:> Tuple n tys)     ->
-    ------------------------------------------
-    gamma |- (Proj fi t n i) <:> (index i tys)
+          gamma |- t <:> Tuple n tys    ->
+    --------------------------------------
+    gamma |- Proj fi t n i <:> index i tys
+
+  TRcd : Info ->
+                  {fields : Vect n String} -> {u : UniqueFields fields}           ->
+                               Derivations gamma ts tys                           ->
+    --------------------------------------------------------------------------------
+    gamma |- Record fi (MkRecord n fields ts u) <:> Record (MkRecord n fields tys u)
+
+  TRProj : Info ->
+    gamma |- t <:> Record (MkRecord n fields tys u) -> InRecord field ty fields tys ->
+    ----------------------------------------------------------------------------------
+                           gamma |- ProjField fi field t <:> ty
 
 funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
 funInjective Refl = (Refl, Refl)
 
 Uninhabited (Bool = Arr _ _) where uninhabited _ impossible
 Uninhabited (Arr _ _ = Bool) where uninhabited _ impossible
-
-getTypeFromContext : Info -> (ctx : Context) -> (i : Nat) -> (InContext i ctx) => Infer Ty
-getTypeFromContext fi ctx i = do
-  let VarBind ty = getBinding fi ctx i
-      | _ => Error fi [] "Wrong kind of binding for variable \{indexToName ctx i}"
-  pure ty
 
 data TypeDerivation : Type where
   MkTypeDerivation : (0 ctx : Context) -> (0 t : Tm) -> (0 ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TypeDerivation
@@ -263,8 +295,8 @@ mutual
         | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
     pure (tty ** TIf fi pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
   deriveType ctx (Var fi i) = do
-    inCtx <- GetInContext ctx i
-    ty <- GetTypeFromContext fi ctx i
+    let Yes (ty ** inCtx) = inContext ctx i
+        | No _ => Error fi [] "Variable not found \{show i}"
     pure (ty ** (TVar fi inCtx))
   deriveType ctx (Abs fi var ty t) = do
     (ty2 ** tDeriv) <- deriveType (addBinding var ty ctx) t
@@ -307,20 +339,21 @@ mutual
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
     pure (ty2 ** TProj2 fi tDeriv)
   deriveType ctx (Tuple fi n tms) = do
-    (tys ** tty) <- deriveTupleTypes ctx tms
+    (tys ** tty) <- deriveTypes ctx tms
     pure (Tuple n tys ** TTuple fi tty)
   deriveType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- deriveType ctx t
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than tuple"
     let Yes n_is_m = decEq n m
         | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
     pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj fi (rewrite n_is_m in tDeriv)))
 
-  deriveTupleTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** TupleFields ctx tms tys)
-  deriveTupleTypes ctx [] = pure ([] ** [])
-  deriveTupleTypes ctx (t :: ts) = do
-    (ty  ** tDeriv) <- deriveType       ctx t
-    (tys ** fields) <- deriveTupleTypes ctx ts
-    pure (ty :: tys ** (MkTupleFieldInfo t ty tDeriv) :: fields)
+  deriveTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
+  deriveTypes ctx [] = pure ([] ** [])
+  deriveTypes ctx (t :: ts) = do
+    (ty  ** tDeriv) <- deriveType  ctx t
+    (tys ** fields) <- deriveTypes ctx ts
+    pure (ty :: tys ** (MkDerivation t ty tDeriv) :: fields)
 
 -- typeOf : (ctx : Context) -> (t : Tm) -> Infer Ty
 
@@ -428,4 +461,28 @@ data Evaluation : Tm -> Tm -> Type where
                   {n,m : Nat} -> {vs : Vect n Tm} -> {t : Tm} -> {ts : Vect m Tm}                  ->
                                 ForEach vs Value -> Evaluation t t'                                ->
     -------------------------------------------------------------------------------------------------
-    Evaluation (Tuple fi (n + (1 + m)) (vs ++ (t :: ts))) (Tuple fi (n + (1 + m)) (vs ++ (t' :: ts)))
+      Evaluation
+        (Tuple fi (n + (1 + m)) (vs ++ (t :: ts)))
+        (Tuple fi (n + (1 + m)) (vs ++ (t' :: ts)))
+
+  EProjRec :
+    {r : Record Tm} -> {inr : InRecord field v r.fields r.values}  ->
+                        (vs : ForEach r.values Value)              ->
+    -----------------------------------------------------------------                        
+             Evaluation (ProjField fi1 field (Record fi2 r)) v
+
+  EProjField :
+                        Evaluation t t'                    ->
+    ---------------------------------------------------------
+    Evaluation (ProjField fi field t) (ProjField fi field t')
+
+  ERcd :
+                 {n,m : Nat}                                                           ->
+                 {lvs : Vect n String} -> {f : String} -> {lts : Vect m String}        ->
+                 {vs  : Vect n Tm    } -> {t : Tm    } -> {ts  : Vect m Tm}            ->
+                         {u : UniqueFields (lvs ++ (f :: lts))}                        ->
+                           ForEach vs Value -> Evaluation t t'                         ->
+    -------------------------------------------------------------------------------------
+        Evaluation
+          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t :: ts)) u))
+          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t' :: ts)) u))
