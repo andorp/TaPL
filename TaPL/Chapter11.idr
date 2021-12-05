@@ -186,35 +186,36 @@ namespace FieldIndex
   fieldIndex : (tag : String) -> (v : Variant a) -> Maybe (i : Nat ** (Index tag i v.tags, (x : a ** Index x i v.info)))
   fieldIndex tag v = fieldIndexGo v.size tag v.tags v.info
 
-
 namespace Term
 
   public export
   data Tm : Type where
-    True  : (fi : Info)                                           -> Tm
-    False : (fi : Info)                                           -> Tm
-    If    : (fi : Info) -> (p,t,e : Tm)                           -> Tm
-    Var   : (fi : Info) -> (i : Nat)                              -> Tm 
-    Abs   : (fi : Info) -> (var : Name) -> (ty : Ty) -> (t : Tm)  -> Tm
-    App   : (fi : Info) -> (t1, t2 : Tm)                          -> Tm
-    Unit  : (fi : Info)                                           -> Tm
+    True  : (fi : Info)                                               -> Tm
+    False : (fi : Info)                                               -> Tm
+    If    : (fi : Info) -> (p,t,e : Tm)                               -> Tm
+    Var   : (fi : Info) -> (i : Nat)                                  -> Tm 
+    Abs   : (fi : Info) -> (var : Name) -> (ty : Ty) -> (t : Tm)      -> Tm
+    App   : (fi : Info) -> (t1, t2 : Tm)                              -> Tm
+    Unit  : (fi : Info)                                               -> Tm
 
-    Seq   : (fi : Info) -> (t1, t2 : Tm)                          -> Tm
-    As    : (fi : Info) -> (t : Tm) -> (ty : Ty)                  -> Tm
-    Let   : (fi : Info) -> (n : Name) -> (t : Tm) -> (b : Tm)     -> Tm
+    Seq   : (fi : Info) -> (t1, t2 : Tm)                              -> Tm
+    As    : (fi : Info) -> (t : Tm) -> (ty : Ty)                      -> Tm
+    Let   : (fi : Info) -> (n : Name) -> (t : Tm) -> (b : Tm)         -> Tm
     
-    Pair  : (fi : Info) -> (p1,p2 : Tm)                           -> Tm
-    First  : (fi : Info) -> (t : Tm)                              -> Tm
-    Second : (fi : Info) -> (t : Tm)                              -> Tm
+    Pair  : (fi : Info) -> (p1,p2 : Tm)                               -> Tm
+    First  : (fi : Info) -> (t : Tm)                                  -> Tm
+    Second : (fi : Info) -> (t : Tm)                                  -> Tm
 
-    Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)          -> Tm
-    Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)   -> Tm
+    Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)              -> Tm
+    Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)       -> Tm
 
-    Record : (fi : Info) -> (Record.Record Tm)                    -> Tm
-    ProjField : (fi : Info) -> (field : String) -> (t : Tm)       -> Tm
+    Record : (fi : Info) -> (Record.Record Tm)                        -> Tm
+    ProjField : (fi : Info) -> (field : String) -> (t : Tm)           -> Tm
 
-    Variant : (fi : Info) -> (tag : String) -> (t : Tm) -> (ty : Ty) -> Tm
-    Case : (fi : Info) -> (t : Tm) -> (tags : Variant (Name, Tm)) -> Tm -- TODO: Rename alts
+    Variant : (fi : Info) -> (tag : String) -> (t : Tm) -> (ty : Ty)  -> Tm
+    Case : (fi : Info) -> (t : Tm) -> (alts : Variant (Name, Tm))     -> Tm
+
+    Fix : (fi : Info) -> (t : Tm)                                     -> Tm
 
 namespace Value
 
@@ -372,6 +373,11 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     ----------------------------------------------------------------------------------------
                        gamma |- Case fi t0 (MkVariant n tags alts u nz) <:> ty
 
+  TFix : Info ->
+    (gamma |- t1 <:> (Arr ty ty)) ->
+    --------------------------------
+        gamma |- Fix fi t1 <:> ty
+
 funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
 funInjective Refl = (Refl, Refl)
 
@@ -471,6 +477,12 @@ mutual
         | No _ => Error fi [mkTD t0Deriv] "Internal error: Different unique-tag derivations in Record type inference."
     (ty ** vDerivs) <- inferVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
     pure (ty ** TCase fi t0Deriv vDerivs)
+  inferType ctx (Fix fi t) = do
+    (Arr ty1 ty2 ** tDeriv) <- inferType ctx t
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected function type."
+    let Yes Refl = decEq ty1 ty2    
+        | No _ => Error fi [mkTD tDeriv] "Function domain and codomain should be the same." -- TODO: Expected got
+    pure (ty1 ** TFix fi tDeriv)
 
   inferTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
   inferTypes ctx [] = pure ([] ** [])
@@ -642,3 +654,13 @@ data Evaluation : Tm -> Tm -> Type where
             Evaluation
               (Case fi1 (Variant fi2 tag t ty) (MkVariant n tags alts u nz))
               (substituition (x,vj) tj)
+
+  EFix :
+             Evaluation t t'       ->
+    ---------------------------------
+    Evaluation (Fix fi t) (Fix fi t')
+
+  EFixBeta :
+    ----------------------------------------------------------------------------------------
+    Evaluation (Fix fi1 (Abs fi2 x ty tm)) (substituition (x, Fix fi1 (Abs fi2 x ty tm)) tm)
+
