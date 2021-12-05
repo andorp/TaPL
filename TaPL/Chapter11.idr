@@ -12,10 +12,14 @@ data Info : Type
 data Context : Type
 data TypeStatement : Type
 data (|-) : (0 _ : Context) -> TypeStatement -> Type
-data TypeDerivation : Type
+
+-- Even in a namespace
+
+namespace TypeInferenceError
+  public export
+  data TypeInferenceError : Type
 
 namespace Ty
-  -- Even in a namespace
   public export
   data Ty : Type
 
@@ -65,7 +69,7 @@ addBinding n ty ctx = ctx :< (n, VarBind ty)
 data Infer : Type -> Type where
   Pure : a -> Infer a
   Bind : Infer a -> (a -> Infer b) -> Infer b
-  Error : {a : Type} -> Info -> List TypeDerivation -> String -> Infer a
+  Error : {a : Type} -> Info -> List TypeInferenceError -> Infer a
 
 namespace InferMonad
 
@@ -429,32 +433,62 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     -----------------------------------
       gamma |- Tail fi ty t <:> List ty
 
-data TypeDerivation : Type where
-  MkTypeDerivation : (0 ctx : Context) -> (0 t : Tm) -> (0 ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TypeDerivation
+namespace TypeInferenceError
 
-mkTD : (ctx |- t <:> ty) -> TypeDerivation
-mkTD deriv = MkTypeDerivation ctx t ty deriv
+  public export
+  data TypeInferenceError : Type where
+    DerivInfo       : (deriv : (ctx |- t <:> ty))       -> TypeInferenceError
+    TypeMissmatch   : (expected, found : Ty)            -> TypeInferenceError
+    ArityMissmatch  : (expected, found : Nat)           -> TypeInferenceError
+    TagMissmatch    : (expected, found : Vect n String) -> TypeInferenceError
+    Message         : String                            -> TypeInferenceError
+    NotFound        : (ctx : Context) -> (i : Nat)      -> TypeInferenceError
+    FoundType       : (ty : Ty)                         -> TypeInferenceError
+    InternalError   : String                            -> TypeInferenceError
+
+  export
+  derivInfos : VariantDerivations n ctx tms tys ty -> List TypeInferenceError
+  derivInfos [] = []
+  derivInfos ((MkDerivation t ty deriv) :: vs) = DerivInfo deriv :: derivInfos vs
 
 mutual
 
   inferType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
+
   inferType ctx (True fi) = pure (Bool ** TTrue fi)
+
   inferType ctx (False fi) = pure (Bool ** TFalse fi)
+
   inferType ctx (If fi p t e) = do
     (Bool ** pDeriv) <- inferType ctx p
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "guard of conditional is not a Bool"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , TypeMissmatch Bool wt
+          , Message "guard of conditional has wrong type"
+          ]
     (tty ** thenDeriv) <- inferType ctx t
     (ety ** elseDeriv) <- inferType ctx e
     let Yes Refl = decEq tty ety
-        | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
+        | No _ => Error fi
+            [ DerivInfo thenDeriv
+            , DerivInfo elseDeriv
+            , TypeMissmatch tty ety
+            , Message "arms of conditional have different types"
+            ]
     pure (tty ** TIf fi pDeriv thenDeriv elseDeriv)
+
   inferType ctx (Var fi i) = do
     let Yes (ty ** inCtx) = inContext ctx i
-        | No _ => Error fi [] "Variable not found \{show i}"
+        | No _ => Error fi
+            [ NotFound ctx i
+            , Message "Variable not found"
+            ]
     pure (ty ** (TVar fi inCtx))
+
   inferType ctx (Abs fi var ty t) = do
     (ty2 ** tDeriv) <- inferType (addBinding var ty ctx) t
     pure (Arr ty ty2 ** TAbs fi tDeriv)
+
   inferType ctx (App fi t1 t2) = do
     (ty1 ** t1Deriv) <- inferType ctx t1
     (ty2 ** t2Deriv) <- inferType ctx t2
@@ -463,98 +497,224 @@ mutual
         Yes Refl
           => pure (aty2 ** TApp fi t1Deriv t2Deriv)
         No _
-          => Error fi [mkTD t2Deriv] "parameter type mismatch"
-      _ => Error fi [mkTD t1Deriv] "arrow type expected"
+          => Error fi
+              [ DerivInfo t1Deriv
+              , DerivInfo t2Deriv
+              , TypeMissmatch aty1 ty2
+              , Message "parameter type mismatch"
+              ]
+      _ => Error fi
+              [ DerivInfo t1Deriv
+              , DerivInfo t2Deriv
+              , FoundType ty1
+              , Message "function type expected"
+              ]
+
   inferType ctx (Unit fi) = pure (Unit ** TUnit fi)
+
   inferType ctx (Seq fi t1 t2) = do
     (Unit ** t1Deriv) <- inferType ctx t1
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "First arm of sequence doesn't have Unit type"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , TypeMissmatch Unit wt
+          , Message "First arm of sequence doesn't have Unit type"
+          ]
     (ty2 ** t2Deriv) <- inferType ctx t2
     pure (ty2 ** TSeq fi t1Deriv t2Deriv)
+
   inferType ctx (As fi t ty) = do
     (ty1 ** tDeriv) <- inferType ctx t
     let Yes Refl = decEq ty ty1
-        | No _ => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch ty ty1
+            , Message "Found type is different than ascribed type"
+            ]
     pure (ty ** TAscribe fi tDeriv)
+
   inferType ctx (Let fi n t b) = do
     (ty1 ** tDeriv) <- inferType ctx t
     (ty2 ** bDeriv) <- inferType (addBinding n ty1 ctx) b
     pure $ (ty2 ** TLet fi tDeriv bDeriv)
+
   inferType ctx (Pair fi t1 t2) = do
     (ty1 ** t1Deriv) <- inferType ctx t1
     (ty2 ** t2Deriv) <- inferType ctx t2
     pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
+
   inferType ctx (First fi t) = do
     (Product ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Found type is different than product"
+          ]
     pure (ty1 ** TProj1 fi tDeriv)
+
   inferType ctx (Second fi t) = do
     (Product ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Found type is different than product"
+          ]
     pure (ty2 ** TProj2 fi tDeriv)
+
   inferType ctx (Tuple fi n tms) = do
     (tys ** tty) <- inferTypes ctx tms
     pure (Tuple n tys ** TTuple fi tty)
+
   inferType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than tuple"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Found type is different than tuple"
+          ]
     let Yes Refl = decEq n m
-        | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , FoundType (Tuple m tys)
+            , Message "Tuple have different arity than expected"
+            ]
     pure (index idx tys ** (TProj fi tDeriv))
+
   inferType ctx (Variant fi tag tj ty) = do
     let (Variant (MkVariant n tags tys u nz)) = ty
-        | _ => Error fi [] "Should have been type of Variant" -- TODO: Got ty
+        | _ => Error fi
+          [ FoundType ty
+          , Message "Should have been type of Variant"
+          ]
     (tyj1 ** tDeriv) <- inferType ctx tj
     let Just (j ** (idx1, (tyj2 ** idx2))) = fieldIndex tag (MkVariant n tags tys u nz)
-        | Nothing => Error fi [] "\{tag} is not found in the Variant" -- TODO: Describe variants more
+        | Nothing => Error fi
+            [ FoundType tyj1
+            , DerivInfo tDeriv
+            , Message "\{tag} is not found in the Variant"
+            ]
     let Yes Refl = decEq tyj2 tyj1
-        | No _ => Error fi [mkTD tDeriv] "Found type in variant was different than expected" -- TODO: Got ty
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch tyj2 tyj1
+            , Message "Found type in variant was different than expected"
+            ]
     pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi idx1 idx2 tDeriv)
+
   inferType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
     (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- inferType ctx t0
     let Yes Refl = decEq n n_t0
-        | No _ => Error fi [mkTD t0Deriv] "Record had different arity" -- TODO: Expected, got
+        | No _ => Error fi
+            [ DerivInfo t0Deriv
+            , ArityMissmatch n n_t0
+            , Message "Record had different arity"
+            ]
     let Yes Refl = decEq nz nz_t0
-        | No _ => Error fi [mkTD t0Deriv] "Internal error: Different non-zeros in Record type inference."
+        | No _ => Error fi
+            [ DerivInfo t0Deriv
+            , InternalError "Different non-zeros in Record type inference."
+            ]
     let Yes Refl = decEq tags tags_t0
-        | No _ => Error fi [mkTD t0Deriv] "Tags were different" -- TODO: Expected got
+        | No _ => Error fi
+            [ DerivInfo t0Deriv
+            , TagMissmatch tags tags_t0
+            , Message "Tags were different"
+            ]
     let Yes Refl = decEq u u_t0
-        | No _ => Error fi [mkTD t0Deriv] "Internal error: Different unique-tag derivations in Record type inference."
+        | No _ => Error fi
+            [ DerivInfo t0Deriv
+            , InternalError "Different unique-tag derivations in Record type inference."
+            ]
     (ty ** vDerivs) <- inferVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
     pure (ty ** TCase fi t0Deriv vDerivs)
+
   inferType ctx (Fix fi t) = do
     (Arr ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected function type"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Expected function type"
+          ]
     let Yes Refl = decEq ty1 ty2    
-        | No _ => Error fi [mkTD tDeriv] "Function domain and codomain should be the same" -- TODO: Expected got
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch ty1 ty2
+            , Message "Function domain and codomain should be the same"
+            ]
     pure (ty1 ** TFix fi tDeriv)
+
   inferType ctx (Nil fi ty) = pure (List ty ** TNil fi)
+
   inferType ctx (Cons fi ty t1 t2) = do
     (ty1 ** t1Deriv) <- inferType ctx t1
     let Yes Refl = decEq ty ty1
-        | No _ => Error fi [mkTD t1Deriv] "Expected different type of list"
+        | No _ => Error fi
+          [ DerivInfo t1Deriv
+          , TypeMissmatch ty ty1
+          , TypeMissmatch (List ty) (List ty1)
+          , Message "Expected different type of list"
+          ]
     (List ty2 ** t2Deriv) <- inferType ctx t2
-      | (_ ** wrongDeriv) => Error fi [mkTD t1Deriv, mkTD wrongDeriv] "Expected a list type"
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo t1Deriv
+          , DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Expected a list type"
+          ]
     let Yes Refl = decEq ty1 ty2
-        | No _ => Error fi [mkTD t1Deriv, mkTD t2Deriv] "Type of head should be the same as tail"
+        | No _ => Error fi
+            [ DerivInfo t1Deriv
+            , DerivInfo t2Deriv
+            , TypeMissmatch ty1 ty2
+            , Message "Type of head should be the same as tail"
+            ]
     pure (List ty2 ** TCons fi t1Deriv t2Deriv)
+
   inferType ctx (IsNil fi ty t) = do
     (List tty ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Expected a list type."
+          ]
     let Yes Refl = decEq ty tty
-        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch ty tty
+            , TypeMissmatch (List ty) (List tty)
+            , Message "Expected a different type of list"
+            ]
     pure (Bool ** TIsNil fi tDeriv)
+
   inferType ctx (Head fi ty t) = do
     (List tty ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Expected a list type."
+          ]
     let Yes Refl = decEq ty tty
-        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch ty tty
+            , TypeMissmatch (List ty) (List tty)
+            , Message "Expected a different type of list"
+            ]
     pure (ty ** THead fi tDeriv)
+
   inferType ctx (Tail fi ty t) = do
     (List tty ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+      | (wt ** wrongDeriv) => Error fi
+          [ DerivInfo wrongDeriv
+          , FoundType wt
+          , Message "Expected a list type."
+          ]
     let Yes Refl = decEq ty tty
-        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+        | No _ => Error fi
+            [ DerivInfo tDeriv
+            , TypeMissmatch ty tty
+            , TypeMissmatch (List ty) (List tty)
+            , Message "Expected a different type of list"
+            ]
     pure (List ty ** TTail fi tDeriv)
 
 
@@ -576,7 +736,12 @@ mutual
     (tyh ** hDeriv) <- inferType (ctx :< (var,VarBind t)) tm
     (tyt ** variantDerivs) <- inferVariantTypes fi (S n) SIsNonZero ctx (a :: as) (ty :: tys)
     let Yes Refl = decEq tyh tyt
-        | No _ => Error fi [mkTD hDeriv] "Different type found for alternative." -- TODO
+        | No _ => Error fi
+            ((derivInfos variantDerivs) ++
+            [ DerivInfo hDeriv
+            , TypeMissmatch tyh tyt
+            , Message "Different type found for alternative."
+            ])
     pure (tyt ** (MkDerivation tm tyt hDeriv :: variantDerivs))
 
 -- Substituition assumes unique names, no need for alpha conversions.
@@ -599,13 +764,13 @@ data Evaluation : Tm -> Tm -> Type where
     Evaluation (App fi t1 t2) (App fi t1' t2)
   
   EApp2 :
-                      Value v1            ->
+                      Value v1           ->
                   Evaluation t t'        ->
     ---------------------------------------            
     Evaluation (App fi v1 t) (App fi v1 t')
 
   EAppAbs :
-                                Value v                           ->
+                                Value v                          ->
     ---------------------------------------------------------------
     Evaluation (App fi1 (Abs fi2 x ty t) v) (substituition (x,v) t)
   
