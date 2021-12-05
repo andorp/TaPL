@@ -6,12 +6,18 @@ import Decidable.Equality
 Name : Type
 Name = String
 
+-- Declare types in advance:
+
 data Info : Type
-data Ty : Type
 data Context : Type
 data TypeStatement : Type
-data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type
+data (|-) : (0 _ : Context) -> TypeStatement -> Type
 data TypeDerivation : Type
+
+namespace Ty
+  -- Even in a namespace
+  public export
+  data Ty : Type
 
 infix 10 |-
 infix 11 <:>
@@ -219,6 +225,12 @@ namespace Term
 
     Fix : (fi : Info) -> (t : Tm)                                     -> Tm
 
+    Nil : (fi : Info) -> (ty : Ty)                                    -> Tm
+    Cons : (fi : Info) -> (ty : Ty) -> (h,t : Tm)                     -> Tm
+    IsNil : (fi : Info) -> (ty : Ty) -> (t : Tm)                      -> Tm
+    Head : (fi : Info) -> (ty : Ty) -> (t : Tm)                       -> Tm
+    Tail : (fi : Info) -> (ty : Ty) -> (t : Tm)                       -> Tm
+
 namespace Value
 
   public export
@@ -230,20 +242,33 @@ namespace Value
     Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
     Tuple : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
     Record : (r : Record Tm) -> ForEach r.values Value -> Value (Record fi r)
+    Nil     : Value (Nil fi ty)
+    Cons    : Value (Cons fi ty h t)
 
-public export
-data Ty : Type where
-  Bool : Ty
-  Arr  : Ty -> Ty -> Ty
-  Base : String -> Ty
-  Unit : Ty
-  Product : Ty -> Ty -> Ty
-  Tuple : (n : Nat) -> Vect n Ty -> Ty
-  Record : (r : Record Ty) -> Ty
-  Variant : (v : Variant Ty) -> Ty
+namespace Ty
+
+  public export
+  data Ty : Type where
+    Bool : Ty
+    Arr  : Ty -> Ty -> Ty
+    Base : String -> Ty
+    Unit : Ty
+    Product : Ty -> Ty -> Ty
+    Tuple : (n : Nat) -> Vect n Ty -> Ty
+    Record : (r : Record Ty) -> Ty
+    Variant : (v : Variant Ty) -> Ty
+    List : Ty -> Ty
+
+  export
+  funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
+  funInjective Refl = (Refl, Refl)
+
+  export
+  Uninhabited (Bool = Arr _ _) where uninhabited _ impossible
+  Uninhabited (Arr _ _ = Bool) where uninhabited _ impossible
 
 data TypeStatement : Type where
-  (<:>) : (t1 : Tm) -> (t2 : Ty) -> TypeStatement
+  (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
 
 data Derivation : Context -> Tm -> Ty -> Type where
   MkDerivation : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> Derivation ctx t ty
@@ -273,19 +298,19 @@ namespace InVariant
     Here  : InVariant tag x tm (tag :: tags) ((x,tm) :: alts)
     There : InVariant tag x tm tags alts -> InVariant tag x tm (tah :: tags) ((y,tn) :: alts)
 
-data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type where
+data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
-  TVar : (fi : Info) -> (ty : Ty) ->
+  TVar : (fi : Info) ->
       InContext x ty gamma  ->
     --------------------------
      gamma |- Var fi x <:> ty
   
-  TAbs : (fi : Info) -> (ty : Ty) -> -- Introduction rule for Arr
+  TAbs : (fi : Info) -> -- Introduction rule for Arr
      (gamma :< (x,VarBind ty1)) |- tm2 <:> ty2  ->
   ------------------------------------------------ 
    gamma |- Abs fi1 x ty1 tm2 <:> Arr ty1 ty2
 
-  TApp : (fi : Info) -> (ty : Ty) -> -- Elimination rule for Arr
+  TApp : (fi : Info) -> -- Elimination rule for Arr
     (gamma |- tm1 <:> Arr ty11 ty12) -> (gamma |- tm2 <:> ty11) ->
     -------------------------------------------------------------- 
                     gamma |- App fi tm1 tm2 <:> ty12
@@ -298,7 +323,7 @@ data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type where
     --------------------------
     gamma |- False fi <:> Bool
 
-  TIf : (fi : Info) -> (ty : Ty) ->
+  TIf : (fi : Info) ->
     (gamma |- tmp <:> Bool) -> (gamma |- tmt <:> ty) -> (gamma |- tme <:> ty) ->
     ----------------------------------------------------------------------------
                      gamma |- (If fi tmp tmt tme <:> ty)
@@ -307,58 +332,58 @@ data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type where
     -------------------------
     gamma |- Unit fi <:> Unit
 
-  TSeq : (fi : Info) -> (ty : Ty) ->
+  TSeq : (fi : Info) ->
     (gamma |- t1 <:> Unit) -> (gamma |- t2 <:> ty2) ->
     --------------------------------------------------
             gamma |- Seq fi t1 t2 <:> ty2
 
-  TAscribe : (fi : Info) -> (ty : Ty) ->
+  TAscribe : (fi : Info) ->
         (gamma |- t1 <:> ty1)  ->
     -----------------------------
     gamma |- As fi t1 ty1 <:> ty1
 
-  TLet : (fi : Info) -> (ty : Ty) ->
+  TLet : (fi : Info) ->
     (gamma |- (t1 <:> ty1)) -> ((gamma :< (x,VarBind ty1)) |- t2 <:> ty2) ->
     ------------------------------------------------------------------------
                        gamma |- Let fi x t1 t2 <:> ty2
 
-  TPair : (fi : Info) -> (ty : Ty) ->
+  TPair : (fi : Info) ->  --- ???
     (gamma |- (t1 <:> ty1)) -> (gamma |- (t2 <:> ty2)) ->
     -----------------------------------------------------
           gamma |- Pair fi t1 t2 <:> Product ty1 ty2
 
-  TProj1 : (fi : Info) -> (ty : Ty) ->
+  TProj1 : (fi : Info) ->  --- ???
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
           gamma |- First fi t1 <:> ty1
 
-  TProj2 : (fi : Info) -> (ty : Ty) ->
+  TProj2 : (fi : Info) -> --- ???
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
          gamma |- Second fi t1 <:> ty2
 
-  TTuple : (fi : Info) -> (ty : Ty) ->
+  TTuple : (fi : Info) -> --- ???
           Derivations gamma ts tys      ->
     --------------------------------------
     gamma |- Tuple fi n ts <:> Tuple n tys
 
-  TProj : (fi : Info) -> (ty : Ty) ->
+  TProj : (fi : Info) ->  --- ???
           gamma |- t <:> Tuple n tys    ->
     --------------------------------------
     gamma |- Proj fi t n i <:> index i tys
 
-  TRcd : (fi : Info) -> (ty : Ty) ->
+  TRcd : (fi : Info) ->  --- ???
                   {fields : Vect n String} -> {u : UniqueFields fields}           ->
                                Derivations gamma ts tys                           ->
     --------------------------------------------------------------------------------
     gamma |- Record fi (MkRecord n fields ts u) <:> Record (MkRecord n fields tys u)
 
-  TRProj : (fi : Info) -> (ty : Ty) ->
+  TRProj : (fi : Info) ->
     gamma |- t <:> Record (MkRecord n fields tys u) -> InRecord field ty fields tys ->
     ----------------------------------------------------------------------------------
                           gamma |- ProjField fi field t <:> ty
 
-  TVariant : (fi : Info) -> (ty : Ty) ->
+  TVariant : (fi : Info) ->  --- ???
                                             {n : Nat} -> {nz : NonZero n}                                       ->
                                             {j : Nat} -> {ty : Ty}                                              ->
                   {tags : Vect n String} -> {tys : Vect n Ty} ->  {u : UniqueTags n tags} -> {tj : Tm}          -> 
@@ -366,7 +391,7 @@ data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type where
     --------------------------------------------------------------------------------------------------------------
       gamma |- Variant fi tag tj (Variant (MkVariant n tags tys u nz)) <:> (Variant (MkVariant n tags tys u nz))
 
-  TCase : (fi : Info) -> (ty : Ty) ->
+  TCase : (fi : Info) ->
                                   {n : Nat} -> {nz : NonZero n}                           ->
         {tags : Vect n String} -> {u : UniqueTags n tags} -> {alts : Vect n (Name, Tm)}   ->
                                  {ty : Ty} -> {tys : Vect n Ty}                           ->
@@ -375,16 +400,34 @@ data (|-) : (0 _ : Context) -> (0 _ : TypeStatement) -> Type where
     ----------------------------------------------------------------------------------------
                        gamma |- Case fi t0 (MkVariant n tags alts u nz) <:> ty
 
-  TFix : (fi : Info) -> (ty : Ty) ->
+  TFix : (fi : Info) ->
     (gamma |- t1 <:> (Arr ty ty)) ->
     --------------------------------
         gamma |- Fix fi t1 <:> ty
 
-funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
-funInjective Refl = (Refl, Refl)
+  TNil : (fi : Info) -> 
+    ------------------------------
+    gamma |- Nil fi ty <:> List ty
+  
+  TCons : (fi : Info) ->
+    (gamma |- t1 <:> ty) -> (gamma |- t2 <:> List ty) ->
+    ----------------------------------------------------
+            gamma |- Cons fi ty t1 t2 <:> List ty
 
-Uninhabited (Bool = Arr _ _) where uninhabited _ impossible
-Uninhabited (Arr _ _ = Bool) where uninhabited _ impossible
+  TIsNil : (fi : Info) ->
+       (gamma |- t <:> List ty)  ->
+    -------------------------------
+    gamma |- IsNil fi ty t <:> Bool
+
+  THead : (fi : Info) ->
+        (gamma |- t <:> List ty)  ->
+    --------------------------------
+      gamma |- Head fi ty t <:> ty
+
+  TTail : (fi : Info) ->
+          (gamma |- t <:> List ty)   ->
+    -----------------------------------
+      gamma |- Tail fi ty t <:> List ty
 
 data TypeDerivation : Type where
   MkTypeDerivation : (0 ctx : Context) -> (0 t : Tm) -> (0 ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> TypeDerivation
@@ -404,21 +447,21 @@ mutual
     (ety ** elseDeriv) <- inferType ctx e
     let Yes Refl = decEq tty ety
         | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
-    pure (tty ** TIf fi tty pDeriv thenDeriv elseDeriv)
+    pure (tty ** TIf fi pDeriv thenDeriv elseDeriv)
   inferType ctx (Var fi i) = do
     let Yes (ty ** inCtx) = inContext ctx i
         | No _ => Error fi [] "Variable not found \{show i}"
-    pure (ty ** (TVar fi ty inCtx))
+    pure (ty ** (TVar fi inCtx))
   inferType ctx (Abs fi var ty t) = do
     (ty2 ** tDeriv) <- inferType (addBinding var ty ctx) t
-    pure (Arr ty ty2 ** TAbs fi (Arr ty ty2) tDeriv)
+    pure (Arr ty ty2 ** TAbs fi tDeriv)
   inferType ctx (App fi t1 t2) = do
     (ty1 ** t1Deriv) <- inferType ctx t1
     (ty2 ** t2Deriv) <- inferType ctx t2
     case ty1 of
       Arr aty1 aty2 => case decEq ty2 aty1 of
         Yes Refl
-          => pure (aty2 ** TApp fi aty2 t1Deriv t2Deriv)
+          => pure (aty2 ** TApp fi t1Deriv t2Deriv)
         No _
           => Error fi [mkTD t2Deriv] "parameter type mismatch"
       _ => Error fi [mkTD t1Deriv] "arrow type expected"
@@ -427,46 +470,46 @@ mutual
     (Unit ** t1Deriv) <- inferType ctx t1
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "First arm of sequence doesn't have Unit type"
     (ty2 ** t2Deriv) <- inferType ctx t2
-    pure (ty2 ** TSeq fi ty2 t1Deriv t2Deriv)
+    pure (ty2 ** TSeq fi t1Deriv t2Deriv)
   inferType ctx (As fi t ty) = do
     (ty1 ** tDeriv) <- inferType ctx t
     let Yes Refl = decEq ty ty1
         | No _ => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
-    pure (ty ** TAscribe fi ty tDeriv)
+    pure (ty ** TAscribe fi tDeriv)
   inferType ctx (Let fi n t b) = do
     (ty1 ** tDeriv) <- inferType ctx t
     (ty2 ** bDeriv) <- inferType (addBinding n ty1 ctx) b
-    pure $ (ty2 ** TLet fi ty2 tDeriv bDeriv)
+    pure $ (ty2 ** TLet fi tDeriv bDeriv)
   inferType ctx (Pair fi t1 t2) = do
     (ty1 ** t1Deriv) <- inferType ctx t1
     (ty2 ** t2Deriv) <- inferType ctx t2
-    pure $ (Product ty1 ty2 ** TPair fi (Product ty1 ty2) t1Deriv t2Deriv)
+    pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
   inferType ctx (First fi t) = do
     (Product ty1 ty2 ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
-    pure (ty1 ** TProj1 fi ty1 tDeriv)
+    pure (ty1 ** TProj1 fi tDeriv)
   inferType ctx (Second fi t) = do
     (Product ty1 ty2 ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
-    pure (ty2 ** TProj2 fi ty2 tDeriv)
+    pure (ty2 ** TProj2 fi tDeriv)
   inferType ctx (Tuple fi n tms) = do
     (tys ** tty) <- inferTypes ctx tms
-    pure (Tuple n tys ** TTuple fi (Tuple n tys) tty)
+    pure (Tuple n tys ** TTuple fi tty)
   inferType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than tuple"
     let Yes Refl = decEq n m
         | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
-    pure (index idx tys ** (TProj fi (index idx tys) tDeriv))
+    pure (index idx tys ** (TProj fi tDeriv))
   inferType ctx (Variant fi tag tj ty) = do
     let (Variant (MkVariant n tags tys u nz)) = ty
-        | _ => Error fi [] "Should have been type of Variant." -- TODO: Got ty
+        | _ => Error fi [] "Should have been type of Variant" -- TODO: Got ty
     (tyj1 ** tDeriv) <- inferType ctx tj
     let Just (j ** (idx1, (tyj2 ** idx2))) = fieldIndex tag (MkVariant n tags tys u nz)
-        | Nothing => Error fi [] "\{tag} is not found in the Variant." -- TODO: Describe variants more
+        | Nothing => Error fi [] "\{tag} is not found in the Variant" -- TODO: Describe variants more
     let Yes Refl = decEq tyj2 tyj1
-        | No _ => Error fi [mkTD tDeriv] "Found type in variant was different than expected." -- TODO: Got ty
-    pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi (Variant (MkVariant n tags tys u nz)) idx1 idx2 tDeriv)
+        | No _ => Error fi [mkTD tDeriv] "Found type in variant was different than expected" -- TODO: Got ty
+    pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi idx1 idx2 tDeriv)
   inferType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
     (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- inferType ctx t0
     let Yes Refl = decEq n n_t0
@@ -478,13 +521,42 @@ mutual
     let Yes Refl = decEq u u_t0
         | No _ => Error fi [mkTD t0Deriv] "Internal error: Different unique-tag derivations in Record type inference."
     (ty ** vDerivs) <- inferVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
-    pure (ty ** TCase fi ty t0Deriv vDerivs)
+    pure (ty ** TCase fi t0Deriv vDerivs)
   inferType ctx (Fix fi t) = do
     (Arr ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected function type."
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected function type"
     let Yes Refl = decEq ty1 ty2    
-        | No _ => Error fi [mkTD tDeriv] "Function domain and codomain should be the same." -- TODO: Expected got
-    pure (ty1 ** TFix fi ty1 tDeriv)
+        | No _ => Error fi [mkTD tDeriv] "Function domain and codomain should be the same" -- TODO: Expected got
+    pure (ty1 ** TFix fi tDeriv)
+  inferType ctx (Nil fi ty) = pure (List ty ** TNil fi)
+  inferType ctx (Cons fi ty t1 t2) = do
+    (ty1 ** t1Deriv) <- inferType ctx t1
+    let Yes Refl = decEq ty ty1
+        | No _ => Error fi [mkTD t1Deriv] "Expected different type of list"
+    (List ty2 ** t2Deriv) <- inferType ctx t2
+      | (_ ** wrongDeriv) => Error fi [mkTD t1Deriv, mkTD wrongDeriv] "Expected a list type"
+    let Yes Refl = decEq ty1 ty2
+        | No _ => Error fi [mkTD t1Deriv, mkTD t2Deriv] "Type of head should be the same as tail"
+    pure (List ty2 ** TCons fi t1Deriv t2Deriv)
+  inferType ctx (IsNil fi ty t) = do
+    (List tty ** tDeriv) <- inferType ctx t
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+    let Yes Refl = decEq ty tty
+        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+    pure (Bool ** TIsNil fi tDeriv)
+  inferType ctx (Head fi ty t) = do
+    (List tty ** tDeriv) <- inferType ctx t
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+    let Yes Refl = decEq ty tty
+        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+    pure (ty ** THead fi tDeriv)
+  inferType ctx (Tail fi ty t) = do
+    (List tty ** tDeriv) <- inferType ctx t
+      | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Expected a list type."
+    let Yes Refl = decEq ty tty
+        | No _ => Error fi [mkTD tDeriv] "Expected a different type of list"
+    pure (List ty ** TTail fi tDeriv)
+
 
   inferTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
   inferTypes ctx [] = pure ([] ** [])
@@ -666,3 +738,47 @@ data Evaluation : Tm -> Tm -> Type where
     ----------------------------------------------------------------------------------------
     Evaluation (Fix fi1 (Abs fi2 x ty tm)) (substituition (x, Fix fi1 (Abs fi2 x ty tm)) tm)
 
+  ECons1 :
+                    Evaluation t1 t1'              ->
+    -------------------------------------------------
+    Evaluation (Cons fi ty t1 t2) (Cons fi ty t1' t2)
+
+  ECons2 :
+                     {v1 : Value t1}               ->
+                    Evaluation t2 t2'              ->
+    -------------------------------------------------
+    Evaluation (Cons fi ty t1 t2) (Cons fi ty t1 t2')
+
+  EIsNilNil :
+    ---------------------------------------------------
+    Evaluation (IsNil fi1 ty1 (Nil fi2 ty2)) (True fi1)
+  
+  EIsNilCons :
+                {v1 : Value t1} -> {v2 : Value t2}           ->
+    -----------------------------------------------------------
+    Evaluation (IsNil fi1 ty1 (Cons fi2 ty2 t1 t2)) (False fi1)
+
+  EIsNil :
+                    Evaluation t t'              ->
+    -----------------------------------------------
+      Evaluation (IsNil fi ty t) (IsNil fi ty t')
+
+  EHeadCons :
+                    {v1 : Value t1}                ->
+    -------------------------------------------------
+    Evaluation (Head fi1 ty1 (Cons fi2 ty2 t1 t2)) t1
+
+  EHead :
+                 Evaluation t t'           ->
+    -----------------------------------------
+    Evaluation (Head fi ty t) (Head fi ty t')
+
+  ETailCons :
+            {v1 : Value t1} -> {v2 : Value t2}     ->
+    -------------------------------------------------
+    Evaluation (Tail fi1 ty1 (Cons fi2 ty1 t1 t2)) t2
+
+  ETail :
+                  Evaluation t t'          ->
+    -----------------------------------------
+    Evaluation (Tail fi ty t) (Tail fi ty t')
