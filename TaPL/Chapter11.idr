@@ -239,29 +239,29 @@ namespace Value
 
   public export
   data Value : Tm -> Type where
-    Abs   : Value (Abs fi var ty t)
-    True  : Value (True fi)
-    False : Value (False fi)
-    Unit  : Value (Unit fi)
-    Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
-    Tuple : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
-    Record : (r : Record Tm) -> ForEach r.values Value -> Value (Record fi r)
+    Abs     : Value (Abs fi var ty t)
+    True    : Value (True fi)
+    False   : Value (False fi)
+    Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
     Cons    : Value (Cons fi ty h t)
+    Pair    : Value v1 -> Value v2                                -> Value (Pair fi v1 v2)
+    Tuple   : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
+    Record  : (r : Record Tm) -> ForEach r.values Value           -> Value (Record fi r)
 
 namespace Ty
 
   public export
   data Ty : Type where
-    Bool : Ty
-    Arr  : Ty -> Ty -> Ty
-    Base : String -> Ty
-    Unit : Ty
-    Product : Ty -> Ty -> Ty
-    Tuple : (n : Nat) -> Vect n Ty -> Ty
-    Record : (r : Record Ty) -> Ty
-    Variant : (v : Variant Ty) -> Ty
-    List : Ty -> Ty
+    Bool    : Ty
+    Arr     : Ty -> Ty                -> Ty
+    Base    : String                  -> Ty
+    Unit    : Ty
+    Product : Ty -> Ty                -> Ty
+    Tuple   : (n : Nat) -> Vect n Ty  -> Ty
+    Record  : (r : Record Ty)         -> Ty
+    Variant : (v : Variant Ty)        -> Ty
+    List    : Ty                      -> Ty
 
   export
   funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
