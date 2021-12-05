@@ -52,6 +52,7 @@ public export
 addBinding : Name -> Ty -> Context -> Context
 addBinding n ty ctx = ctx :< (n, VarBind ty)
 
+
 data Infer : Type -> Type where
   Pure : a -> Infer a
   Bind : Infer a -> (a -> Infer b) -> Infer b
@@ -81,7 +82,7 @@ getBinding fi (ctx :< (n, VarBind ty)) 0     Here      = VarBind ty
 getBinding fi (ctx :< b)               (S n) (There x) = getBinding fi ctx n x
 
 DecEq Ty where
-  decEq _ _ = ?h1
+  decEq _ _ = ?decEqTy
   -- decEq Bool Bool = Yes Refl
   -- decEq Bool (Arr x y) = No uninhabited
   -- decEq (Arr x y) Bool = No uninhabited
@@ -91,18 +92,40 @@ DecEq Ty where
   --   ((No contraXZ), (Yes yIsW)   ) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
   --   ((No contraXZ), (No contraYW)) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
 
-data ForEach : Vect n a -> (p : a -> Type) -> Type where
-  Nil  : ForEach [] p
-  (::) : {xs : Vect n a} -> (p x) -> ForEach xs p -> ForEach (x :: xs) p
+namespace ForEach
+
+  public export
+  data ForEach : Vect n a -> (p : a -> Type) -> Type where
+    Nil  : ForEach [] p
+    (::) : {xs : Vect n a} -> (p x) -> ForEach xs p -> ForEach (x :: xs) p
+
+namespace NotInt
+  
+
+  public export
+  data NotIn : String -> Vect n String -> Type where
+    Nil  : NotIn n []
+    (::) : (0 c : Not (n = f)) -> NotIn n fs -> NotIn n (f :: fs)
+
+-- If the f and fs are the same, there should be only one way to create the list that proofs for every
+-- element the f is not in the fs vector. If we compare such two values, the only possible difference
+-- are the proofs that that f is not the head of the vector. We could have many computationaly different
+-- functions to create an impossbile Void value, but we say, if we got one, that the difference is their
+-- implementation is not relevant.
+-- At the same time we don't use such a proof at runtime, because the 0 quantity on the Cons cell, meaning
+-- that the runtime representation of such field, will be the Erased value, which is much easier to find
+-- if that is the same or not, as it should be the same, we are on the safe side.
+DecEq (NotIn f fs) where
+  decEq n1 n2 = Yes (believe_me (Refl {x=n1}))
+
+namespace Index
+
+  public export
+  data Index : a -> Nat -> Vect n a -> Type where
+    Here  : Index x 0 (x :: xs)
+    There : Index x n xs -> Index x (S n) (y :: xs)
 
 namespace Record
-
-  namespace NotInt
-  
-    public export
-    data NotIn : String -> Vect n String -> Type where
-      Nil  : NotIn n []
-      (::) : Not (n = f) -> NotIn n fs -> NotIn n (f :: fs)
 
   public export
   data UniqueFields : Vect n String -> Type where
@@ -115,12 +138,59 @@ namespace Record
     size   : Nat
     fields : Vect size String
     values : Vect size a
-    0 uniqueFields : UniqueFields fields
+    uniqueFields : UniqueFields fields
 
   public export
   data InRecord : String -> a -> Vect n String -> Vect n a -> Type where
     Here  : InRecord f x (f :: fs) (x :: xs)
     There : InRecord f x fs xs -> InRecord f x (g :: fs) (y :: xs)
+
+namespace Variant
+
+  public export
+  data UniqueTags : (n : Nat) -> Vect n String -> Type where
+    Nil  : UniqueTags 0 []
+    (::) : NotIn f fs -> UniqueTags n fs -> UniqueTags (S n) (f :: fs)
+
+  export
+  notInInjective : (Variant.(::) ni1 ut1 = ni2 :: ut2) -> (ni1 = ni2, ut1 = ut2)
+  notInInjective Refl = (Refl, Refl)
+
+  public export
+  record Variant (a : Type) where
+    constructor MkVariant
+    size        : Nat
+    tags        : Vect size String
+    info        : Vect size a
+    uniqueTags  : UniqueTags size tags
+    nonEmpty    : NonZero size
+
+DecEq (UniqueTags n xs) where
+  decEq [] [] = Yes Refl
+  decEq (x :: y) (z :: w) = case (decEq x z, decEq y w) of
+    ((Yes x_is_z)   , (Yes y_is_w)   ) => Yes (cong2 (::) x_is_z y_is_w)
+    ((Yes x_is_z)   , (No y_is_not_w)) => No (\assume_xy_is_zw => y_is_not_w (snd (notInInjective assume_xy_is_zw)))
+    ((No x_is_not_z), (Yes y_is_w)   ) => No (\assume_xy_is_zw => x_is_not_z (fst (notInInjective assume_xy_is_zw)))
+    ((No x_is_not_z), (No y_is_not_w)) => No (\assume_xy_is_zw => y_is_not_w (snd (notInInjective assume_xy_is_zw)))
+
+DecEq (NonZero n) where
+  decEq SIsNonZero SIsNonZero = Yes Refl
+
+namespace FieldIndex
+
+  total
+  fieldIndexGo : (n : Nat) -> (tag : String) -> (tags : Vect n String) -> (infos : Vect n a) -> Maybe (i : Nat ** (Index tag i tags, ((x : a ** Index x i infos))))
+  fieldIndexGo 0       tag []        [] = Nothing
+  fieldIndexGo (S len) tag (x :: xs) (y :: ys) = case decEq x tag of
+    Yes Refl        => Just (0 ** (Here, (y ** Here)))
+    No x_is_not_tag => do
+      (i ** (tagThere, (a ** infoThere))) <- fieldIndexGo len tag xs ys
+      Just ((S i) ** (There tagThere, (a ** There infoThere)))
+
+  total export
+  fieldIndex : (tag : String) -> (v : Variant a) -> Maybe (i : Nat ** (Index tag i v.tags, (x : a ** Index x i v.info)))
+  fieldIndex tag v = fieldIndexGo v.size tag v.tags v.info
+
 
 namespace Term
 
@@ -148,6 +218,9 @@ namespace Term
     Record : (fi : Info) -> (Record.Record Tm)                    -> Tm
     ProjField : (fi : Info) -> (field : String) -> (t : Tm)       -> Tm
 
+    Variant : (fi : Info) -> (tag : String) -> (t : Tm) -> (ty : Ty) -> Tm
+    Case : (fi : Info) -> (t : Tm) -> (tags : Variant (Name, Tm)) -> Tm -- TODO: Rename alts
+
 namespace Value
 
   public export
@@ -158,7 +231,7 @@ namespace Value
     Unit  : Value (Unit fi)
     Pair  : Value v1 -> Value v2 -> Value (Pair fi v1 v2)
     Tuple : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
-    Record : {n : Nat} -> (r : Record Tm) -> ForEach r.values Value -> Value (Record fi r) 
+    Record : (r : Record Tm) -> ForEach r.values Value -> Value (Record fi r)
 
 public export
 data Ty : Type where
@@ -169,20 +242,38 @@ data Ty : Type where
   Product : Ty -> Ty -> Ty
   Tuple : (n : Nat) -> Vect n Ty -> Ty
   Record : (r : Record Ty) -> Ty
+  Variant : (v : Variant Ty) -> Ty
 
 data TypeStatement : Type where
   (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
 
-namespace DerivList
+data Derivation : Context -> Tm -> Ty -> Type where
+  MkDerivation : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> Derivation ctx t ty
 
-  public export
-  data Derivation : Context -> Tm -> Ty -> Type where
-    MkDerivation : (t : Tm) -> (ty : Ty) -> (deriv : (ctx |- t <:> ty)) -> Derivation ctx t ty
+namespace DerivList
 
   public export
   data Derivations : Context -> Vect n Tm -> Vect n Ty -> Type where
     Nil  : Derivations ctx [] []
     (::) : Derivation ctx t ty -> Derivations ctx ts tys -> Derivations ctx (t :: ts) (ty :: tys)
+
+namespace VariantDerivations
+
+  ||| Witness that every Tm term in the alternatives has the same Ty type.
+  public export
+  data VariantDerivations : (n : Nat) -> Context -> Vect n (Name, Tm) -> Vect n Ty -> Ty -> Type where
+    Nil  : VariantDerivations 0 ctx [] [] ty
+    (::) : {var : Name} -> {tty : Ty}
+           -> Derivation (ctx :< (var, VarBind tty)) t ty
+           -> VariantDerivations n ctx ts ttys ty
+           -> VariantDerivations (S n) ctx ((var, t) :: ts) (tty :: ttys) ty
+
+namespace InVariant
+
+  public export
+  data InVariant : String -> Name -> Tm -> Vect n String -> Vect n (Name,Tm) -> Type where
+    Here  : InVariant tag x tm (tag :: tags) ((x,tm) :: alts)
+    There : InVariant tag x tm tags alts -> InVariant tag x tm (tah :: tags) ((y,tn) :: alts)
 
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
@@ -269,6 +360,23 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     ----------------------------------------------------------------------------------
                            gamma |- ProjField fi field t <:> ty
 
+  TVariant : Info ->
+                                            {n : Nat} -> {nz : NonZero n}                                       ->
+                                            {j : Nat} -> {ty : Ty}                                              ->
+                  {tags : Vect n String} -> {tys : Vect n Ty} ->  {u : UniqueTags n tags} -> {tj : Tm}          -> 
+                            Index tag j tags -> Index ty j tys -> (gamma |- tj <:> ty)                          ->
+    --------------------------------------------------------------------------------------------------------------
+      gamma |- Variant fi tag tj (Variant (MkVariant n tags tys u nz)) <:> (Variant (MkVariant n tags tys u nz))
+
+  TCase : Info ->
+                                  {n : Nat} -> {nz : NonZero n}                           ->
+        {tags : Vect n String} -> {u : UniqueTags n tags} -> {alts : Vect n (Name, Tm)}   ->
+                                 {ty : Ty} -> {tys : Vect n Ty}                           ->
+                      (gamma |- t0 <:> (Variant (MkVariant n tags tys u nz)))             ->
+                                (VariantDerivations n gamma alts tys ty)                  ->
+    ----------------------------------------------------------------------------------------
+                       gamma |- Case fi t0 (MkVariant n tags alts u nz) <:> ty
+
 funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
 funInjective Refl = (Refl, Refl)
 
@@ -291,9 +399,9 @@ mutual
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "guard of conditional is not a Bool"
     (tty ** thenDeriv) <- deriveType ctx t
     (ety ** elseDeriv) <- deriveType ctx e
-    let Yes tty_is_ety = decEq tty ety
+    let Yes Refl = decEq tty ety
         | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
-    pure (tty ** TIf fi pDeriv thenDeriv (rewrite tty_is_ety in elseDeriv))
+    pure (tty ** TIf fi pDeriv thenDeriv elseDeriv)
   deriveType ctx (Var fi i) = do
     let Yes (ty ** inCtx) = inContext ctx i
         | No _ => Error fi [] "Variable not found \{show i}"
@@ -306,8 +414,8 @@ mutual
     (ty2 ** t2Deriv) <- deriveType ctx t2
     case ty1 of
       Arr aty1 aty2 => case decEq ty2 aty1 of
-        Yes t2_is_aty2
-          => pure (aty2 ** TApp fi t1Deriv (rewrite (sym t2_is_aty2) in t2Deriv))
+        Yes Refl
+          => pure (aty2 ** TApp fi t1Deriv t2Deriv)
         No _
           => Error fi [mkTD t2Deriv] "parameter type mismatch"
       _ => Error fi [mkTD t1Deriv] "arrow type expected"
@@ -319,9 +427,9 @@ mutual
     pure (ty2 ** TSeq fi t1Deriv t2Deriv)
   deriveType ctx (As fi t ty) = do
     (ty1 ** tDeriv) <- deriveType ctx t
-    case decEq ty ty1 of
-      Yes ty_is_ty1 => pure (ty ** TAscribe fi (rewrite ty_is_ty1 in tDeriv))
-      No  _         => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
+    let Yes Refl = decEq ty ty1
+        | No _ => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
+    pure (ty ** TAscribe fi tDeriv)
   deriveType ctx (Let fi n t b) = do
     (ty1 ** tDeriv) <- deriveType ctx t
     (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
@@ -344,9 +452,30 @@ mutual
   deriveType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- deriveType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than tuple"
-    let Yes n_is_m = decEq n m
+    let Yes Refl = decEq n m
         | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
-    pure (index (rewrite (sym n_is_m) in idx) tys ** (TProj fi (rewrite n_is_m in tDeriv)))
+    pure (index idx tys ** (TProj fi tDeriv))
+  deriveType ctx (Variant fi tag tj ty) = do
+    let (Variant (MkVariant n tags tys u nz)) = ty
+        | _ => Error fi [] "Should have been type of Variant." -- TODO: Got ty
+    (tyj1 ** tDeriv) <- deriveType ctx tj
+    let Just (j ** (idx1, (tyj2 ** idx2))) = fieldIndex tag (MkVariant n tags tys u nz)
+        | Nothing => Error fi [] "\{tag} is not found in the Variant." -- TODO: Describe variants more
+    let Yes Refl = decEq tyj2 tyj1
+        | No _ => Error fi [mkTD tDeriv] "Found type in variant was different than expected." -- TODO: Got ty
+    pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi idx1 idx2 tDeriv)
+  deriveType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
+    (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- deriveType ctx t0
+    let Yes Refl = decEq n n_t0
+        | No _ => Error fi [mkTD t0Deriv] "Record had different arity" -- TODO: Expected, got
+    let Yes Refl = decEq nz nz_t0
+        | No _ => Error fi [mkTD t0Deriv] "Internal error: Different non-zeros in Record type inference."
+    let Yes Refl = decEq tags tags_t0
+        | No _ => Error fi [mkTD t0Deriv] "Tags were different" -- TODO: Expected got
+    let Yes Refl = decEq u u_t0
+        | No _ => Error fi [mkTD t0Deriv] "Internal error: Different unique-tag derivations in Record type inference."
+    (ty ** vDerivs) <- deriveVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
+    pure (ty ** TCase fi t0Deriv vDerivs)
 
   deriveTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
   deriveTypes ctx [] = pure ([] ** [])
@@ -355,7 +484,19 @@ mutual
     (tys ** fields) <- deriveTypes ctx ts
     pure (ty :: tys ** (MkDerivation t ty tDeriv) :: fields)
 
--- typeOf : (ctx : Context) -> (t : Tm) -> Infer Ty
+  -- Check if all the alternatives has the same type in the branch.
+  deriveVariantTypes
+    :  (fi : Info) -> (n : Nat) -> (nz : NonZero n) -> (ctx : Context) -> (alts : Vect n (Name, Tm)) -> (tys : Vect n Ty)
+    -> Infer (ty : Ty ** VariantDerivations n ctx alts tys ty)
+  deriveVariantTypes fi (S 0) SIsNonZero ctx ((var,tm) :: []) (t :: []) = do
+    (tmty ** tmDeriv) <- deriveType (ctx :< (var,VarBind t)) tm
+    pure (tmty ** [MkDerivation tm tmty tmDeriv])
+  deriveVariantTypes fi (S (S n)) SIsNonZero ctx ((var,tm) :: (a :: as)) (t :: (ty :: tys)) = do
+    (tyh ** hDeriv) <- deriveType (ctx :< (var,VarBind t)) tm
+    (tyt ** variantDerivs) <- deriveVariantTypes fi (S n) SIsNonZero ctx (a :: as) (ty :: tys)
+    let Yes Refl = decEq tyh tyt
+        | No _ => Error fi [mkTD hDeriv] "Different type found for alternative." -- TODO
+    pure (tyt ** (MkDerivation tm tyt hDeriv :: variantDerivs))
 
 -- Substituition assumes unique names, no need for alpha conversions.
 -- TODO: Check if this right.
@@ -479,10 +620,30 @@ data Evaluation : Tm -> Tm -> Type where
   ERcd :
                  {n,m : Nat}                                                           ->
                  {lvs : Vect n String} -> {f : String} -> {lts : Vect m String}        ->
-                 {vs  : Vect n Tm    } -> {t : Tm    } -> {ts  : Vect m Tm}            ->
+                 {vs  : Vect n   Tm  } -> {t :   Tm  } -> {ts  : Vect m   Tm  }        ->
                          {u : UniqueFields (lvs ++ (f :: lts))}                        ->
                            ForEach vs Value -> Evaluation t t'                         ->
     -------------------------------------------------------------------------------------
         Evaluation
-          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t :: ts)) u))
+          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t  :: ts)) u))
           (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t' :: ts)) u))
+
+  ECase :
+                   Evaluation t0 t0'             ->
+    -----------------------------------------------
+    Evaluation (Case fi t0 tags) (Case fi t0' tags)
+
+  EVariant :
+                        Evaluation t t'                  ->
+    -------------------------------------------------------
+    Evaluation (Variant fi tag t ty) (Variant fi tag t' ty)
+
+  ECaseVariant :
+                            {n : Nat} -> {nz : NonZero n}                           ->
+    {tags : Vect n String} -> {alts : Vect n (Name, Tm)} -> {u : UniqueTags n tags} ->
+                             ForEach alts (Value . snd)                             ->
+                             InVariant tag x vj tags alts                           ->
+    ----------------------------------------------------------------------------------
+            Evaluation
+              (Case fi1 (Variant fi2 tag t ty) (MkVariant n tags alts u nz))
+              (substituition (x,vj) tj)
