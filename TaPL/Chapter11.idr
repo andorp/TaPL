@@ -110,6 +110,7 @@ namespace NotInt
 -- At the same time we don't use such a proof at runtime, because the 0 quantity on the Cons cell, meaning
 -- that the runtime representation of such field, will be the Erased value, which is much easier to find
 -- if that is the same or not, as it should be the same, we are on the safe side.
+  export
 DecEq (NotIn f fs) where
   decEq n1 n2 = Yes (believe_me (Refl {x=n1}))
 
@@ -160,6 +161,7 @@ namespace Variant
     uniqueTags  : UniqueTags size tags
     nonEmpty    : NonZero size
 
+  export
 DecEq (UniqueTags n xs) where
   decEq [] [] = Yes Refl
   decEq (x :: y) (z :: w) = case (decEq x z, decEq y w) of
