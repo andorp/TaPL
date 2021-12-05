@@ -77,10 +77,6 @@ Monad Infer where
   join m  = Bind m id
   m >>= k = Bind m k
 
-getBinding : Info -> (ctx : Context) -> (i : Nat) -> (inCtx : InContext i ty ctx) -> Binding
-getBinding fi (ctx :< (n, VarBind ty)) 0     Here      = VarBind ty
-getBinding fi (ctx :< b)               (S n) (There x) = getBinding fi ctx n x
-
 DecEq Ty where
   decEq _ _ = ?decEqTy
   -- decEq Bool Bool = Yes Refl
@@ -100,7 +96,6 @@ namespace ForEach
     (::) : {xs : Vect n a} -> (p x) -> ForEach xs p -> ForEach (x :: xs) p
 
 namespace NotInt
-  
 
   public export
   data NotIn : String -> Vect n String -> Type where
@@ -391,27 +386,27 @@ mkTD deriv = MkTypeDerivation ctx t ty deriv
 
 mutual
 
-  deriveType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
-  deriveType ctx (True fi) = pure (Bool ** TTrue fi)
-  deriveType ctx (False fi) = pure (Bool ** TFalse fi)
-  deriveType ctx (If fi p t e) = do
-    (Bool ** pDeriv) <- deriveType ctx p
+  inferType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
+  inferType ctx (True fi) = pure (Bool ** TTrue fi)
+  inferType ctx (False fi) = pure (Bool ** TFalse fi)
+  inferType ctx (If fi p t e) = do
+    (Bool ** pDeriv) <- inferType ctx p
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "guard of conditional is not a Bool"
-    (tty ** thenDeriv) <- deriveType ctx t
-    (ety ** elseDeriv) <- deriveType ctx e
+    (tty ** thenDeriv) <- inferType ctx t
+    (ety ** elseDeriv) <- inferType ctx e
     let Yes Refl = decEq tty ety
         | No _ => Error fi [mkTD thenDeriv, mkTD elseDeriv] "arms of conditional have different types"
     pure (tty ** TIf fi pDeriv thenDeriv elseDeriv)
-  deriveType ctx (Var fi i) = do
+  inferType ctx (Var fi i) = do
     let Yes (ty ** inCtx) = inContext ctx i
         | No _ => Error fi [] "Variable not found \{show i}"
     pure (ty ** (TVar fi inCtx))
-  deriveType ctx (Abs fi var ty t) = do
-    (ty2 ** tDeriv) <- deriveType (addBinding var ty ctx) t
+  inferType ctx (Abs fi var ty t) = do
+    (ty2 ** tDeriv) <- inferType (addBinding var ty ctx) t
     pure (Arr ty ty2 ** TAbs fi tDeriv)
-  deriveType ctx (App fi t1 t2) = do
-    (ty1 ** t1Deriv) <- deriveType ctx t1
-    (ty2 ** t2Deriv) <- deriveType ctx t2
+  inferType ctx (App fi t1 t2) = do
+    (ty1 ** t1Deriv) <- inferType ctx t1
+    (ty2 ** t2Deriv) <- inferType ctx t2
     case ty1 of
       Arr aty1 aty2 => case decEq ty2 aty1 of
         Yes Refl
@@ -419,53 +414,53 @@ mutual
         No _
           => Error fi [mkTD t2Deriv] "parameter type mismatch"
       _ => Error fi [mkTD t1Deriv] "arrow type expected"
-  deriveType ctx (Unit fi) = pure (Unit ** TUnit fi)
-  deriveType ctx (Seq fi t1 t2) = do
-    (Unit ** t1Deriv) <- deriveType ctx t1
+  inferType ctx (Unit fi) = pure (Unit ** TUnit fi)
+  inferType ctx (Seq fi t1 t2) = do
+    (Unit ** t1Deriv) <- inferType ctx t1
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "First arm of sequence doesn't have Unit type"
-    (ty2 ** t2Deriv) <- deriveType ctx t2
+    (ty2 ** t2Deriv) <- inferType ctx t2
     pure (ty2 ** TSeq fi t1Deriv t2Deriv)
-  deriveType ctx (As fi t ty) = do
-    (ty1 ** tDeriv) <- deriveType ctx t
+  inferType ctx (As fi t ty) = do
+    (ty1 ** tDeriv) <- inferType ctx t
     let Yes Refl = decEq ty ty1
         | No _ => Error fi [mkTD tDeriv] "Found type is different than ascribed type"
     pure (ty ** TAscribe fi tDeriv)
-  deriveType ctx (Let fi n t b) = do
-    (ty1 ** tDeriv) <- deriveType ctx t
-    (ty2 ** bDeriv) <- deriveType (addBinding n ty1 ctx) b
+  inferType ctx (Let fi n t b) = do
+    (ty1 ** tDeriv) <- inferType ctx t
+    (ty2 ** bDeriv) <- inferType (addBinding n ty1 ctx) b
     pure $ (ty2 ** TLet fi tDeriv bDeriv)
-  deriveType ctx (Pair fi t1 t2) = do
-    (ty1 ** t1Deriv) <- deriveType ctx t1
-    (ty2 ** t2Deriv) <- deriveType ctx t2
+  inferType ctx (Pair fi t1 t2) = do
+    (ty1 ** t1Deriv) <- inferType ctx t1
+    (ty2 ** t2Deriv) <- inferType ctx t2
     pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
-  deriveType ctx (First fi t) = do
-    (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
+  inferType ctx (First fi t) = do
+    (Product ty1 ty2 ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
     pure (ty1 ** TProj1 fi tDeriv)
-  deriveType ctx (Second fi t) = do
-    (Product ty1 ty2 ** tDeriv) <- deriveType ctx t
+  inferType ctx (Second fi t) = do
+    (Product ty1 ty2 ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than product"
     pure (ty2 ** TProj2 fi tDeriv)
-  deriveType ctx (Tuple fi n tms) = do
-    (tys ** tty) <- deriveTypes ctx tms
+  inferType ctx (Tuple fi n tms) = do
+    (tys ** tty) <- inferTypes ctx tms
     pure (Tuple n tys ** TTuple fi tty)
-  deriveType ctx (Proj fi t n idx) = do
-    (Tuple m tys ** tDeriv) <- deriveType ctx t
+  inferType ctx (Proj fi t n idx) = do
+    (Tuple m tys ** tDeriv) <- inferType ctx t
       | (_ ** wrongDeriv) => Error fi [mkTD wrongDeriv] "Found type is different than tuple"
     let Yes Refl = decEq n m
         | No _ => Error fi [mkTD tDeriv] "Tuple have different arity than expected"
     pure (index idx tys ** (TProj fi tDeriv))
-  deriveType ctx (Variant fi tag tj ty) = do
+  inferType ctx (Variant fi tag tj ty) = do
     let (Variant (MkVariant n tags tys u nz)) = ty
         | _ => Error fi [] "Should have been type of Variant." -- TODO: Got ty
-    (tyj1 ** tDeriv) <- deriveType ctx tj
+    (tyj1 ** tDeriv) <- inferType ctx tj
     let Just (j ** (idx1, (tyj2 ** idx2))) = fieldIndex tag (MkVariant n tags tys u nz)
         | Nothing => Error fi [] "\{tag} is not found in the Variant." -- TODO: Describe variants more
     let Yes Refl = decEq tyj2 tyj1
         | No _ => Error fi [mkTD tDeriv] "Found type in variant was different than expected." -- TODO: Got ty
     pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi idx1 idx2 tDeriv)
-  deriveType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
-    (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- deriveType ctx t0
+  inferType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
+    (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- inferType ctx t0
     let Yes Refl = decEq n n_t0
         | No _ => Error fi [mkTD t0Deriv] "Record had different arity" -- TODO: Expected, got
     let Yes Refl = decEq nz nz_t0
@@ -474,26 +469,26 @@ mutual
         | No _ => Error fi [mkTD t0Deriv] "Tags were different" -- TODO: Expected got
     let Yes Refl = decEq u u_t0
         | No _ => Error fi [mkTD t0Deriv] "Internal error: Different unique-tag derivations in Record type inference."
-    (ty ** vDerivs) <- deriveVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
+    (ty ** vDerivs) <- inferVariantTypes fi n_t0 nz_t0 ctx alts tys_t0
     pure (ty ** TCase fi t0Deriv vDerivs)
 
-  deriveTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
-  deriveTypes ctx [] = pure ([] ** [])
-  deriveTypes ctx (t :: ts) = do
-    (ty  ** tDeriv) <- deriveType  ctx t
-    (tys ** fields) <- deriveTypes ctx ts
+  inferTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
+  inferTypes ctx [] = pure ([] ** [])
+  inferTypes ctx (t :: ts) = do
+    (ty  ** tDeriv) <- inferType  ctx t
+    (tys ** fields) <- inferTypes ctx ts
     pure (ty :: tys ** (MkDerivation t ty tDeriv) :: fields)
 
-  -- Check if all the alternatives has the same type in the branch.
-  deriveVariantTypes
+  -- Check if all the alternatives has the same type in their branches.
+  inferVariantTypes
     :  (fi : Info) -> (n : Nat) -> (nz : NonZero n) -> (ctx : Context) -> (alts : Vect n (Name, Tm)) -> (tys : Vect n Ty)
     -> Infer (ty : Ty ** VariantDerivations n ctx alts tys ty)
-  deriveVariantTypes fi (S 0) SIsNonZero ctx ((var,tm) :: []) (t :: []) = do
-    (tmty ** tmDeriv) <- deriveType (ctx :< (var,VarBind t)) tm
+  inferVariantTypes fi (S 0) SIsNonZero ctx ((var,tm) :: []) (t :: []) = do
+    (tmty ** tmDeriv) <- inferType (ctx :< (var,VarBind t)) tm
     pure (tmty ** [MkDerivation tm tmty tmDeriv])
-  deriveVariantTypes fi (S (S n)) SIsNonZero ctx ((var,tm) :: (a :: as)) (t :: (ty :: tys)) = do
-    (tyh ** hDeriv) <- deriveType (ctx :< (var,VarBind t)) tm
-    (tyt ** variantDerivs) <- deriveVariantTypes fi (S n) SIsNonZero ctx (a :: as) (ty :: tys)
+  inferVariantTypes fi (S (S n)) SIsNonZero ctx ((var,tm) :: (a :: as)) (t :: (ty :: tys)) = do
+    (tyh ** hDeriv) <- inferType (ctx :< (var,VarBind t)) tm
+    (tyt ** variantDerivs) <- inferVariantTypes fi (S n) SIsNonZero ctx (a :: as) (ty :: tys)
     let Yes Refl = decEq tyh tyt
         | No _ => Error fi [mkTD hDeriv] "Different type found for alternative." -- TODO
     pure (tyt ** (MkDerivation tm tyt hDeriv :: variantDerivs))
