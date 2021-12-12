@@ -90,17 +90,6 @@ Monad Infer where
   join m  = Bind m id
   m >>= k = Bind m k
 
-DecEq Ty where
-  decEq _ _ = ?decEqTy
-  -- decEq Bool Bool = Yes Refl
-  -- decEq Bool (Arr x y) = No uninhabited
-  -- decEq (Arr x y) Bool = No uninhabited
-  -- decEq (Arr x y) (Arr z w) = case (decEq x z, decEq y w) of
-  --   ((Yes xIsZ)   , (Yes yIsW)   ) => Yes $ rewrite xIsZ in rewrite yIsW in Refl
-  --   ((Yes xIsZ)   , (No contraYW)) => No (\assumeArrYW => contraYW (snd (funInjective assumeArrYW)))
-  --   ((No contraXZ), (Yes yIsW)   ) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
-  --   ((No contraXZ), (No contraYW)) => No (\assumeArrXZ => contraXZ (fst (funInjective assumeArrXZ)))
-
 namespace ForEach
 
   public export
@@ -134,27 +123,60 @@ namespace Index
     Here  : Index x 0 (x :: xs)
     There : Index x n xs -> Index x (S n) (y :: xs)
 
-namespace Record
+namespace UniqueFields
 
   public export
   data UniqueFields : Vect n String -> Type where
     Nil  : UniqueFields []
     (::) : NotIn f fs -> UniqueFields fs -> UniqueFields (f :: fs)
 
+  export
+  consInjective : (UniqueFields.(::) x xs = UniqueFields.(::) y ys) -> (x = y, xs = ys)
+  consInjective Refl = (Refl, Refl)
+
+  export
+  DecEq (UniqueFields fs) where
+    decEq [] [] = Yes Refl
+    decEq (x :: y) (z :: w) = case decEq x z of
+      (Yes Refl) => case decEq y w of
+        (Yes Refl) => Yes Refl
+        (No y_is_not_w) => No (\assumeUniqueFieldOK => y_is_not_w (snd (consInjective assumeUniqueFieldOK)))
+      (No x_is_not_z) => No (\assumeUniqueFieldOK => x_is_not_z (fst (consInjective assumeUniqueFieldOK)))
+
+namespace Record
+
   public export
   record Record (a : Type) where
     constructor MkRecord
-    size   : Nat
-    fields : Vect size String
-    values : Vect size a
-    uniqueFields : UniqueFields fields
+    size          : Nat
+    fields        : Vect size String
+    values        : Vect size a
+    uniqueFields  : UniqueFields fields
 
   public export
   data InRecord : String -> a -> Vect n String -> Vect n a -> Type where
     Here  : InRecord f x (f :: fs) (x :: xs)
     There : InRecord f x fs xs -> InRecord f x (g :: fs) (y :: xs)
 
-namespace Variant
+  export
+  recordInjective
+    :  {r,s : Record a} -> (r = s)
+    -> (r.size = s.size, r.fields ~=~ s.fields, r.values ~=~ s.values, r.uniqueFields ~=~ s.uniqueFields)
+  recordInjective Refl = (Refl, Refl, Refl, Refl)
+
+  export
+  DecEq a => DecEq (Record a) where
+    decEq (MkRecord s1 f1 v1 u1) (MkRecord s2 f2 v2 u2) = case decEq s1 s2 of
+      (Yes Refl) => case decEq f1 f2 of
+        (Yes Refl) => case decEq v1 v2 of
+          (Yes Refl) => case decEq u1 u2 of
+            (Yes Refl)        => Yes Refl
+            (No u1_is_not_u2) => No (\assumeRecordOK => u1_is_not_u2 ((snd . snd . snd) (recordInjective assumeRecordOK)))
+          (No v1_is_not_v2) => No (\assumeRecordOK => v1_is_not_v2 ((fst . snd . snd) (recordInjective assumeRecordOK)))
+        (No f1_is_not_f2) => No (\assumeRecordOK => f1_is_not_f2 ((fst . snd) (recordInjective assumeRecordOK)))
+      (No s1_is_not_s2) => No (\assumeRecordOK => s1_is_not_s2 (fst (recordInjective assumeRecordOK)))
+
+namespace UniqueTags
 
   public export
   data UniqueTags : (n : Nat) -> Vect n String -> Type where
@@ -162,8 +184,19 @@ namespace Variant
     (::) : NotIn f fs -> UniqueTags n fs -> UniqueTags (S n) (f :: fs)
 
   export
-  notInInjective : (Variant.(::) ni1 ut1 = ni2 :: ut2) -> (ni1 = ni2, ut1 = ut2)
+  notInInjective : (UniqueTags.(::) ni1 ut1 = UniqueTags.(::) ni2 ut2) -> (ni1 = ni2, ut1 = ut2)
   notInInjective Refl = (Refl, Refl)
+
+  export
+  DecEq (UniqueTags n xs) where
+    decEq [] [] = Yes Refl
+    decEq (x :: y) (z :: w) = case decEq x z of
+      (Yes Refl) => case decEq y w of
+        (Yes Refl) => Yes Refl
+        (No y_is_not_w) => No (\assumeUniqueTags => y_is_not_w (snd (notInInjective assumeUniqueTags)))
+      (No x_is_not_z) => No (\assumeUniqueTags => x_is_not_z (fst (notInInjective assumeUniqueTags)))
+
+namespace Variant
 
   public export
   record Variant (a : Type) where
@@ -175,13 +208,24 @@ namespace Variant
     nonEmpty    : NonZero size
 
   export
-  DecEq (UniqueTags n xs) where
-    decEq [] [] = Yes Refl
-    decEq (x :: y) (z :: w) = case (decEq x z, decEq y w) of
-      ((Yes x_is_z)   , (Yes y_is_w)   ) => Yes (cong2 (::) x_is_z y_is_w)
-      ((Yes x_is_z)   , (No y_is_not_w)) => No (\assume_xy_is_zw => y_is_not_w (snd (notInInjective assume_xy_is_zw)))
-      ((No x_is_not_z), (Yes y_is_w)   ) => No (\assume_xy_is_zw => x_is_not_z (fst (notInInjective assume_xy_is_zw)))
-      ((No x_is_not_z), (No y_is_not_w)) => No (\assume_xy_is_zw => y_is_not_w (snd (notInInjective assume_xy_is_zw)))
+  variantInjective
+    :  {v,w : Variant a} -> (v = w)
+    -> (v.size = w.size, v.tags ~=~ w.tags, v.info ~=~ w.info, v.uniqueTags ~=~ w.uniqueTags, v.nonEmpty ~=~ w.nonEmpty)
+  variantInjective Refl = (Refl, Refl, Refl, Refl, Refl)
+
+  export
+  DecEq a => DecEq (Variant a) where
+    decEq (MkVariant s1 t1 i1 u1 n1) (MkVariant s2 t2 i2 u2 n2) = case decEq s1 s2 of
+      (Yes Refl) => case decEq t1 t2 of
+        (Yes Refl) => case decEq i1 i2 of
+          (Yes Refl) => case decEq u1 u2 of
+            (Yes Refl) => case decEq n1 n2 of
+              (Yes Refl) => Yes Refl
+              (No n1_is_not_n2) => No (\assumeVariantOK => n1_is_not_n2 ((snd . snd . snd . snd) (variantInjective assumeVariantOK)))
+            (No u1_is_not_u2) => No (\assumeVariantOK => u1_is_not_u2 ((fst . snd . snd . snd) (variantInjective assumeVariantOK)))
+          (No i1_is_not_i2) => No (\assumeVariantOK => i1_is_not_i2 ((fst . snd . snd) (variantInjective assumeVariantOK)))
+        (No t1_is_not_t2) => No (\assumeVariantOK => t1_is_not_t2 ((fst . snd) (variantInjective assumeVariantOK)))
+      (No s1_is_not_s2) => No (\assumeVariantOK => s1_is_not_s2 (fst (variantInjective assumeVariantOK)))
 
 namespace FieldIndex
 
@@ -264,12 +308,225 @@ namespace Ty
     List    : Ty                      -> Ty
 
   export
-  funInjective : (Arr x y = Arr z w) -> (x = z, y = w)
+  funInjective : (Ty.Arr x y = Ty.Arr z w) -> (x = z, y = w)
   funInjective Refl = (Refl, Refl)
 
   export
-  Uninhabited (Bool = Arr _ _) where uninhabited _ impossible
-  Uninhabited (Arr _ _ = Bool) where uninhabited _ impossible
+  baseInjective : (Ty.Base x = Ty.Base y) -> x = y
+  baseInjective Refl = Refl
+
+  export
+  productInjective : (Ty.Product x y = Ty.Product z w) -> (x = z, y = w)
+  productInjective Refl = (Refl, Refl)
+
+  export
+  tupleInjective : (Ty.Tuple n xs = Ty.Tuple m ys) -> (n = m, xs = ys)
+  tupleInjective Refl = (Refl, Refl)
+
+  export
+  recordInjective : (Ty.Record x = Ty.Record y) -> (x = y)
+  recordInjective Refl = Refl
+
+  export
+  variantInjective : (Ty.Variant x = Ty.Variant y) -> (x = y)
+  variantInjective Refl = Refl
+
+  export
+  listInjective : (Ty.List x = Ty.List y) -> (x = y)
+  listInjective Refl = Refl
+
+  export Uninhabited (Ty.Bool = Ty.Arr _ _)           where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Base _)            where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Unit)              where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Product _ _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Tuple n v)         where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Record _)          where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.Variant _)         where uninhabited _ impossible
+  export Uninhabited (Ty.Bool = Ty.List _)            where uninhabited _ impossible
+
+  export Uninhabited (Ty.Arr _ _ = Ty.Bool)           where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Base _)         where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Unit)           where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Product _ _)    where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Tuple n v)      where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Record _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.Variant _)      where uninhabited _ impossible
+  export Uninhabited (Ty.Arr _ _ = Ty.List _)         where uninhabited _ impossible
+
+  export Uninhabited (Ty.Base _ = Ty.Bool)            where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Arr _ _)         where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Unit)            where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Product _ _)     where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Tuple n v)       where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Record _)        where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.Variant _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Base _ = Ty.List _)          where uninhabited _ impossible
+
+  export Uninhabited (Ty.Unit = Ty.Bool)              where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Arr _ _)           where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Base _)            where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Product _ _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Tuple n v)         where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Record _)          where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.Variant _)         where uninhabited _ impossible
+  export Uninhabited (Ty.Unit = Ty.List _)            where uninhabited _ impossible
+
+  export Uninhabited (Ty.Product _ _ = Bool)          where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Arr _ _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Base _)        where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Unit)          where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Tuple n v)     where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Record _)      where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = Variant _)     where uninhabited _ impossible
+  export Uninhabited (Ty.Product _ _ = List _)        where uninhabited _ impossible
+
+  export Uninhabited (Ty.Tuple n v = Bool)            where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Arr _ _)         where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Base _)          where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Unit)            where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Product _ _)     where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Record _)        where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = Variant _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Tuple n v = List _)          where uninhabited _ impossible
+
+  export Uninhabited (Ty.Record _ = Bool)             where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Arr _ _)          where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Base _)           where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Unit)             where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Product _ _)      where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Tuple n v)        where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = Variant _)        where uninhabited _ impossible
+  export Uninhabited (Ty.Record _ = List _)           where uninhabited _ impossible
+
+  export Uninhabited (Ty.Variant _ = Ty.Bool)         where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Arr _ _)      where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Base _)       where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Unit)         where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Product _ _)  where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Tuple n v)    where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.Record _)     where uninhabited _ impossible
+  export Uninhabited (Ty.Variant _ = Ty.List _)       where uninhabited _ impossible
+
+  export Uninhabited (Ty.List _ = Ty.Bool)            where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Arr _ _)         where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Base _)          where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Unit)            where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Product _ _)     where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Tuple n v)       where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Record _)        where uninhabited _ impossible
+  export Uninhabited (Ty.List _ = Ty.Variant _)       where uninhabited _ impossible
+
+  public export
+  DecEq Ty where
+    decEq Bool Bool = Yes Refl
+    decEq Bool (Arr x y)      = No uninhabited
+    decEq Bool (Base x)       = No uninhabited
+    decEq Bool Unit           = No uninhabited
+    decEq Bool (Product x y)  = No uninhabited
+    decEq Bool (Tuple n xs)   = No uninhabited
+    decEq Bool (Record r)     = No uninhabited
+    decEq Bool (Variant v)    = No uninhabited
+    decEq Bool (List x)       = No uninhabited
+
+    decEq (Arr x y) Bool      = No uninhabited
+    decEq (Arr x y) (Arr z w) = case decEq x z of
+      (Yes Refl) => case decEq y w of
+        (Yes Refl      ) => Yes Refl 
+        (No  y_is_not_w) => No (\assumeArrOk => (y_is_not_w (snd (funInjective assumeArrOk))))
+      (No x_is_not_z) => No (\assumeArrOk => (x_is_not_z (fst (funInjective assumeArrOk))))
+    decEq (Arr x y) (Base z)      = No uninhabited
+    decEq (Arr x y) Unit          = No uninhabited
+    decEq (Arr x y) (Product z w) = No uninhabited
+    decEq (Arr x y) (Tuple n xs)  = No uninhabited
+    decEq (Arr x y) (Record r)    = No uninhabited
+    decEq (Arr x y) (Variant v)   = No uninhabited
+    decEq (Arr x y) (List z)      = No uninhabited
+
+    decEq (Base x) Bool       = No uninhabited
+    decEq (Base x) (Arr y z)  = No uninhabited
+    decEq (Base x) (Base y) = case decEq x y of
+      (Yes Refl       ) => Yes Refl
+      (No  x_is_not_y ) => No (\assumeBaseOk => x_is_not_y (baseInjective assumeBaseOk))
+    decEq (Base x) Unit           = No uninhabited
+    decEq (Base x) (Product y z)  = No uninhabited
+    decEq (Base x) (Tuple n xs)   = No uninhabited
+    decEq (Base x) (Record r)     = No uninhabited
+    decEq (Base x) (Variant v)    = No uninhabited
+    decEq (Base x) (List y)       = No uninhabited
+
+    decEq Unit Bool           = No uninhabited
+    decEq Unit (Arr x y)      = No uninhabited
+    decEq Unit (Base x)       = No uninhabited
+    decEq Unit Unit           = Yes Refl
+    decEq Unit (Product x y)  = No uninhabited
+    decEq Unit (Tuple n xs)   = No uninhabited
+    decEq Unit (Record r)     = No uninhabited
+    decEq Unit (Variant v)    = No uninhabited
+    decEq Unit (List x)       = No uninhabited
+
+    decEq (Product x y) Bool      = No uninhabited
+    decEq (Product x y) (Arr z w) = No uninhabited
+    decEq (Product x y) (Base z)  = No uninhabited
+    decEq (Product x y) Unit      = No uninhabited
+    decEq (Product x y) (Product z w) = case decEq x z of
+      (Yes Refl) => case decEq y w of
+        (Yes Refl      ) => Yes Refl
+        (No  y_is_not_w) => No (\assumeProductOK => y_is_not_w (snd (productInjective assumeProductOK)))
+      (No x_is_not_z) => No (\assumeProductOK => x_is_not_z (fst (productInjective assumeProductOK)))
+    decEq (Product x y) (Tuple n xs)  = No uninhabited
+    decEq (Product x y) (Record r)    = No uninhabited
+    decEq (Product x y) (Variant v)   = No uninhabited
+    decEq (Product x y) (List z)      = No uninhabited
+
+    decEq (Tuple n xs) Bool          = No uninhabited
+    decEq (Tuple n xs) (Arr x y)     = No uninhabited
+    decEq (Tuple n xs) (Base x)      = No uninhabited
+    decEq (Tuple n xs) Unit          = No uninhabited
+    decEq (Tuple n xs) (Product x y) = No uninhabited
+    decEq (Tuple n xs) (Tuple k ys) = case decEq n k of
+      (Yes Refl) => case decEq xs ys of
+        (Yes Refl)         => Yes Refl
+        (No  xs_is_not_ys) => No (\assumeTupleOK => xs_is_not_ys (snd (tupleInjective assumeTupleOK)))
+      (No n_is_not_k)      => No (\assumeTupleOK => n_is_not_k (fst (tupleInjective assumeTupleOK)))
+    decEq (Tuple n xs) (Record r)   = No uninhabited
+    decEq (Tuple n xs) (Variant v)  = No uninhabited
+    decEq (Tuple n xs) (List x)     = No uninhabited
+
+    decEq (Record r) Bool           = No uninhabited
+    decEq (Record r) (Arr x y)      = No uninhabited
+    decEq (Record r) (Base x)       = No uninhabited
+    decEq (Record r) Unit           = No uninhabited
+    decEq (Record r) (Product x y)  = No uninhabited
+    decEq (Record r) (Tuple n xs)   = No uninhabited
+    decEq (Record r) (Record x) = case decEq r x of
+      (Yes Refl      ) => Yes Refl
+      (No  r_is_not_x) => No (\assumeRecordOK => r_is_not_x (recordInjective assumeRecordOK))
+    decEq (Record r) (Variant v)    = No uninhabited
+    decEq (Record r) (List x)       = No uninhabited
+
+    decEq (Variant v) Bool          = No uninhabited
+    decEq (Variant v) (Arr x y)     = No uninhabited
+    decEq (Variant v) (Base x)      = No uninhabited
+    decEq (Variant v) Unit          = No uninhabited
+    decEq (Variant v) (Product x y) = No uninhabited
+    decEq (Variant v) (Tuple n xs)  = No uninhabited
+    decEq (Variant v) (Record r)    = No uninhabited
+    decEq (Variant v) (Variant x) = case decEq v x of
+      (Yes Refl      ) => Yes Refl
+      (No  v_is_not_x) => No (\assumeVariantOk => v_is_not_x (variantInjective assumeVariantOk))
+    decEq (Variant v) (List x)      = No uninhabited
+
+    decEq (List x) Bool           = No uninhabited
+    decEq (List x) (Arr y z)      = No uninhabited
+    decEq (List x) (Base y)       = No uninhabited
+    decEq (List x) Unit           = No uninhabited
+    decEq (List x) (Product y z)  = No uninhabited
+    decEq (List x) (Tuple n xs)   = No uninhabited
+    decEq (List x) (Record r)     = No uninhabited
+    decEq (List x) (Variant v)    = No uninhabited
+    decEq (List x) (List y) = case decEq x y of
+      (Yes Refl      ) => Yes Refl
+      (No  x_is_not_y) => No (\assumeListOk => x_is_not_y (listInjective assumeListOk))
 
 data TypeStatement : Type where
   (<:>) : (0 t1 : Tm) -> (t2 : Ty) -> TypeStatement
@@ -351,32 +608,32 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     ------------------------------------------------------------------------
                        gamma |- Let fi x t1 t2 <:> ty2
 
-  TPair : (fi : Info) ->  --- ???
+  TPair : (fi : Info) ->
     (gamma |- (t1 <:> ty1)) -> (gamma |- (t2 <:> ty2)) ->
     -----------------------------------------------------
           gamma |- Pair fi t1 t2 <:> Product ty1 ty2
 
-  TProj1 : (fi : Info) ->  --- ???
+  TProj1 : (fi : Info) ->
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
           gamma |- First fi t1 <:> ty1
 
-  TProj2 : (fi : Info) -> --- ???
+  TProj2 : (fi : Info) ->
     (gamma |- (t1 <:> Product ty1 ty2)) ->
     --------------------------------------
          gamma |- Second fi t1 <:> ty2
 
-  TTuple : (fi : Info) -> --- ???
+  TTuple : (fi : Info) ->
           Derivations gamma ts tys      ->
     --------------------------------------
     gamma |- Tuple fi n ts <:> Tuple n tys
 
-  TProj : (fi : Info) ->  --- ???
+  TProj : (fi : Info) ->
           gamma |- t <:> Tuple n tys    ->
     --------------------------------------
     gamma |- Proj fi t n i <:> index i tys
 
-  TRcd : (fi : Info) ->  --- ???
+  TRcd : (fi : Info) ->
                   {fields : Vect n String} -> {u : UniqueFields fields}           ->
                                Derivations gamma ts tys                           ->
     --------------------------------------------------------------------------------
@@ -387,7 +644,7 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     ----------------------------------------------------------------------------------
                           gamma |- ProjField fi field t <:> ty
 
-  TVariant : (fi : Info) ->  --- ???
+  TVariant : (fi : Info) ->
                                             {n : Nat} -> {nz : NonZero n}                                       ->
                                             {j : Nat} -> {ty : Ty}                                              ->
                   {tags : Vect n String} -> {tys : Vect n Ty} ->  {u : UniqueTags n tags} -> {tj : Tm}          -> 
