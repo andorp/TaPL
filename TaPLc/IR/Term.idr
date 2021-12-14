@@ -9,6 +9,8 @@ import TaPLc.IR.Name
 import TaPLc.IR.Info
 import TaPLc.Data.Vect
 
+%default total
+
 public export
 data Tm : Type where
   True  : (fi : Info)                                               -> Tm

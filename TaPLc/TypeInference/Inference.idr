@@ -15,6 +15,7 @@ import TaPLc.TypeInference.TypingRules
 import TaPLc.Data.Vect
 import TaPLc.Data.NonZero
 
+%default total
 
 namespace TypeInferenceError
 
@@ -79,7 +80,6 @@ namespace VariantFieldIndex
 
 mutual
 
-  -- total
   covering
   inferType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
 
@@ -370,7 +370,6 @@ mutual
             ]
     pure (List ty ** TTail fi tDeriv)
 
-  -- total
   covering
   inferTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)
   inferTypes ctx [] = pure ([] ** [])
@@ -380,7 +379,6 @@ mutual
     pure (ty :: tys ** (MkDerivation t ty tDeriv) :: fields)
 
   -- Check if all the alternatives has the same type in their branches.
-  -- total
   covering
   inferVariantCaseTypes
     :  (fi : Info) -> (n : Nat) -> (nz : NonZero n) -> (ctx : Context) -> (alts : Vect n (Name, Tm)) -> (tys : Vect n Ty)

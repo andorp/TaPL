@@ -3,6 +3,8 @@ module TaPLc.IR.Context
 import TaPLc.IR.Type
 import TaPLc.IR.Name
 
+%default total
+
 public export
 data Binding : Type where
   VarBind  : (ty : Ty) -> Binding

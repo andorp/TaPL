@@ -6,6 +6,7 @@ import Decidable.Equality
 import TaPLc.IR.UniqueNames
 import TaPLc.Data.NonZero
 
+%default total
 
 public export
 record Variant (a : Type) where

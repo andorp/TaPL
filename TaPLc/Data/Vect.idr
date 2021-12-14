@@ -2,6 +2,8 @@ module TaPLc.Data.Vect
 
 import Data.Vect
 
+%default total
+
 namespace Index
 
   public export

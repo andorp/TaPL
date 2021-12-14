@@ -3,6 +3,8 @@ module TaPLc.IR.UniqueNames
 import Data.Vect
 import Decidable.Equality
 
+%default total
+
 namespace NotInt
 
   public export

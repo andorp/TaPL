@@ -12,6 +12,7 @@ import TaPLc.IR.Record
 import TaPLc.IR.Variant
 import TaPLc.Data.Vect
 
+%default total
 
 infix 10 |-
 infix 11 <:>

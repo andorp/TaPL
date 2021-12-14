@@ -6,6 +6,7 @@ import Decidable.Equality
 import TaPLc.IR.Record
 import TaPLc.IR.Variant
 
+%default total
 
 public export
 data Ty : Type where
@@ -141,8 +142,8 @@ DecEq Ty where
   decEq Bool (List x)       = No uninhabited
 
   decEq (Arr x y) Bool      = No uninhabited
-  decEq (Arr x y) (Arr z w) = case decEq x z of
-    (Yes Refl) => case decEq y w of
+  decEq (Arr x y) (Arr z w) = case assert_total (decEq x z) of
+    (Yes Refl) => case assert_total (decEq y w) of
       (Yes Refl      ) => Yes Refl 
       (No  y_is_not_w) => No (\assumeArrOk => (y_is_not_w (snd (funInjective assumeArrOk))))
     (No x_is_not_z) => No (\assumeArrOk => (x_is_not_z (fst (funInjective assumeArrOk))))
@@ -156,7 +157,7 @@ DecEq Ty where
 
   decEq (Base x) Bool       = No uninhabited
   decEq (Base x) (Arr y z)  = No uninhabited
-  decEq (Base x) (Base y) = case decEq x y of
+  decEq (Base x) (Base y) = case assert_total (decEq x y) of
     (Yes Refl       ) => Yes Refl
     (No  x_is_not_y ) => No (\assumeBaseOk => x_is_not_y (baseInjective assumeBaseOk))
   decEq (Base x) Unit           = No uninhabited
@@ -180,8 +181,8 @@ DecEq Ty where
   decEq (Product x y) (Arr z w) = No uninhabited
   decEq (Product x y) (Base z)  = No uninhabited
   decEq (Product x y) Unit      = No uninhabited
-  decEq (Product x y) (Product z w) = case decEq x z of
-    (Yes Refl) => case decEq y w of
+  decEq (Product x y) (Product z w) = case assert_total (decEq x z) of
+    (Yes Refl) => case assert_total (decEq y w) of
       (Yes Refl      ) => Yes Refl
       (No  y_is_not_w) => No (\assumeProductOK => y_is_not_w (snd (productInjective assumeProductOK)))
     (No x_is_not_z) => No (\assumeProductOK => x_is_not_z (fst (productInjective assumeProductOK)))
@@ -195,8 +196,8 @@ DecEq Ty where
   decEq (Tuple n xs) (Base x)      = No uninhabited
   decEq (Tuple n xs) Unit          = No uninhabited
   decEq (Tuple n xs) (Product x y) = No uninhabited
-  decEq (Tuple n xs) (Tuple k ys) = case decEq n k of
-    (Yes Refl) => case decEq xs ys of
+  decEq (Tuple n xs) (Tuple k ys) = case assert_total (decEq n k) of
+    (Yes Refl) => case assert_total (decEq xs ys) of
       (Yes Refl)         => Yes Refl
       (No  xs_is_not_ys) => No (\assumeTupleOK => xs_is_not_ys (snd (tupleInjective assumeTupleOK)))
     (No n_is_not_k)      => No (\assumeTupleOK => n_is_not_k (fst (tupleInjective assumeTupleOK)))
@@ -210,7 +211,7 @@ DecEq Ty where
   decEq (Record r) Unit           = No uninhabited
   decEq (Record r) (Product x y)  = No uninhabited
   decEq (Record r) (Tuple n xs)   = No uninhabited
-  decEq (Record r) (Record x) = case decEq r x of
+  decEq (Record r) (Record x) = case assert_total (decEq r x) of
     (Yes Refl      ) => Yes Refl
     (No  r_is_not_x) => No (\assumeRecordOK => r_is_not_x (recordInjective assumeRecordOK))
   decEq (Record r) (Variant v)    = No uninhabited
@@ -223,7 +224,7 @@ DecEq Ty where
   decEq (Variant v) (Product x y) = No uninhabited
   decEq (Variant v) (Tuple n xs)  = No uninhabited
   decEq (Variant v) (Record r)    = No uninhabited
-  decEq (Variant v) (Variant x) = case decEq v x of
+  decEq (Variant v) (Variant x) = case assert_total (decEq v x) of
     (Yes Refl      ) => Yes Refl
     (No  v_is_not_x) => No (\assumeVariantOk => v_is_not_x (variantInjective assumeVariantOk))
   decEq (Variant v) (List x)      = No uninhabited
@@ -236,6 +237,6 @@ DecEq Ty where
   decEq (List x) (Tuple n xs)   = No uninhabited
   decEq (List x) (Record r)     = No uninhabited
   decEq (List x) (Variant v)    = No uninhabited
-  decEq (List x) (List y) = case decEq x y of
+  decEq (List x) (List y) = case assert_total (decEq x y) of
     (Yes Refl      ) => Yes Refl
     (No  x_is_not_y) => No (\assumeListOk => x_is_not_y (listInjective assumeListOk))
