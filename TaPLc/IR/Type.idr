@@ -14,7 +14,6 @@ data Ty : Type where
   Arr     : Ty -> Ty                -> Ty
   Base    : String                  -> Ty
   Unit    : Ty
-  Product : Ty -> Ty                -> Ty
   Tuple   : (n : Nat) -> Vect n Ty  -> Ty
   Record  : (r : Record Ty)         -> Ty
   Variant : (v : Variant Ty)        -> Ty
@@ -27,10 +26,6 @@ funInjective Refl = (Refl, Refl)
 export
 baseInjective : (Type.Base x = Type.Base y) -> x = y
 baseInjective Refl = Refl
-
-export
-productInjective : (Type.Product x y = Type.Product z w) -> (x = z, y = w)
-productInjective Refl = (Refl, Refl)
 
 export
 tupleInjective : (Type.Tuple n xs = Type.Tuple m ys) -> (n = m, xs = ys)
@@ -51,7 +46,6 @@ listInjective Refl = Refl
 export Uninhabited (Type.Bool = Type.Arr _ _)           where uninhabited _ impossible
 export Uninhabited (Type.Bool = Type.Base _)            where uninhabited _ impossible
 export Uninhabited (Type.Bool = Type.Unit)              where uninhabited _ impossible
-export Uninhabited (Type.Bool = Type.Product _ _)       where uninhabited _ impossible
 export Uninhabited (Type.Bool = Type.Tuple n v)         where uninhabited _ impossible
 export Uninhabited (Type.Bool = Type.Record _)          where uninhabited _ impossible
 export Uninhabited (Type.Bool = Type.Variant _)         where uninhabited _ impossible
@@ -60,7 +54,6 @@ export Uninhabited (Type.Bool = Type.List _)            where uninhabited _ impo
 export Uninhabited (Type.Arr _ _ = Type.Bool)           where uninhabited _ impossible
 export Uninhabited (Type.Arr _ _ = Type.Base _)         where uninhabited _ impossible
 export Uninhabited (Type.Arr _ _ = Type.Unit)           where uninhabited _ impossible
-export Uninhabited (Type.Arr _ _ = Type.Product _ _)    where uninhabited _ impossible
 export Uninhabited (Type.Arr _ _ = Type.Tuple n v)      where uninhabited _ impossible
 export Uninhabited (Type.Arr _ _ = Type.Record _)       where uninhabited _ impossible
 export Uninhabited (Type.Arr _ _ = Type.Variant _)      where uninhabited _ impossible
@@ -69,7 +62,6 @@ export Uninhabited (Type.Arr _ _ = Type.List _)         where uninhabited _ impo
 export Uninhabited (Type.Base _ = Type.Bool)            where uninhabited _ impossible
 export Uninhabited (Type.Base _ = Type.Arr _ _)         where uninhabited _ impossible
 export Uninhabited (Type.Base _ = Type.Unit)            where uninhabited _ impossible
-export Uninhabited (Type.Base _ = Type.Product _ _)     where uninhabited _ impossible
 export Uninhabited (Type.Base _ = Type.Tuple n v)       where uninhabited _ impossible
 export Uninhabited (Type.Base _ = Type.Record _)        where uninhabited _ impossible
 export Uninhabited (Type.Base _ = Type.Variant _)       where uninhabited _ impossible
@@ -78,26 +70,15 @@ export Uninhabited (Type.Base _ = Type.List _)          where uninhabited _ impo
 export Uninhabited (Type.Unit = Type.Bool)              where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.Arr _ _)           where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.Base _)            where uninhabited _ impossible
-export Uninhabited (Type.Unit = Type.Product _ _)       where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.Tuple n v)         where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.Record _)          where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.Variant _)         where uninhabited _ impossible
 export Uninhabited (Type.Unit = Type.List _)            where uninhabited _ impossible
 
-export Uninhabited (Type.Product _ _ = Bool)          where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Arr _ _)       where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Base _)        where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Unit)          where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Tuple n v)     where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Record _)      where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = Variant _)     where uninhabited _ impossible
-export Uninhabited (Type.Product _ _ = List _)        where uninhabited _ impossible
-
 export Uninhabited (Type.Tuple n v = Bool)            where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = Arr _ _)         where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = Base _)          where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = Unit)            where uninhabited _ impossible
-export Uninhabited (Type.Tuple n v = Product _ _)     where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = Record _)        where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = Variant _)       where uninhabited _ impossible
 export Uninhabited (Type.Tuple n v = List _)          where uninhabited _ impossible
@@ -106,7 +87,6 @@ export Uninhabited (Type.Record _ = Bool)             where uninhabited _ imposs
 export Uninhabited (Type.Record _ = Arr _ _)          where uninhabited _ impossible
 export Uninhabited (Type.Record _ = Base _)           where uninhabited _ impossible
 export Uninhabited (Type.Record _ = Unit)             where uninhabited _ impossible
-export Uninhabited (Type.Record _ = Product _ _)      where uninhabited _ impossible
 export Uninhabited (Type.Record _ = Tuple n v)        where uninhabited _ impossible
 export Uninhabited (Type.Record _ = Variant _)        where uninhabited _ impossible
 export Uninhabited (Type.Record _ = List _)           where uninhabited _ impossible
@@ -115,7 +95,6 @@ export Uninhabited (Type.Variant _ = Type.Bool)         where uninhabited _ impo
 export Uninhabited (Type.Variant _ = Type.Arr _ _)      where uninhabited _ impossible
 export Uninhabited (Type.Variant _ = Type.Base _)       where uninhabited _ impossible
 export Uninhabited (Type.Variant _ = Type.Unit)         where uninhabited _ impossible
-export Uninhabited (Type.Variant _ = Type.Product _ _)  where uninhabited _ impossible
 export Uninhabited (Type.Variant _ = Type.Tuple n v)    where uninhabited _ impossible
 export Uninhabited (Type.Variant _ = Type.Record _)     where uninhabited _ impossible
 export Uninhabited (Type.Variant _ = Type.List _)       where uninhabited _ impossible
@@ -124,7 +103,6 @@ export Uninhabited (Type.List _ = Type.Bool)            where uninhabited _ impo
 export Uninhabited (Type.List _ = Type.Arr _ _)         where uninhabited _ impossible
 export Uninhabited (Type.List _ = Type.Base _)          where uninhabited _ impossible
 export Uninhabited (Type.List _ = Type.Unit)            where uninhabited _ impossible
-export Uninhabited (Type.List _ = Type.Product _ _)     where uninhabited _ impossible
 export Uninhabited (Type.List _ = Type.Tuple n v)       where uninhabited _ impossible
 export Uninhabited (Type.List _ = Type.Record _)        where uninhabited _ impossible
 export Uninhabited (Type.List _ = Type.Variant _)       where uninhabited _ impossible
@@ -135,7 +113,6 @@ DecEq Ty where
   decEq Bool (Arr x y)      = No uninhabited
   decEq Bool (Base x)       = No uninhabited
   decEq Bool Unit           = No uninhabited
-  decEq Bool (Product x y)  = No uninhabited
   decEq Bool (Tuple n xs)   = No uninhabited
   decEq Bool (Record r)     = No uninhabited
   decEq Bool (Variant v)    = No uninhabited
@@ -149,7 +126,6 @@ DecEq Ty where
     (No x_is_not_z) => No (\assumeArrOk => (x_is_not_z (fst (funInjective assumeArrOk))))
   decEq (Arr x y) (Base z)      = No uninhabited
   decEq (Arr x y) Unit          = No uninhabited
-  decEq (Arr x y) (Product z w) = No uninhabited
   decEq (Arr x y) (Tuple n xs)  = No uninhabited
   decEq (Arr x y) (Record r)    = No uninhabited
   decEq (Arr x y) (Variant v)   = No uninhabited
@@ -161,7 +137,6 @@ DecEq Ty where
     (Yes Refl       ) => Yes Refl
     (No  x_is_not_y ) => No (\assumeBaseOk => x_is_not_y (baseInjective assumeBaseOk))
   decEq (Base x) Unit           = No uninhabited
-  decEq (Base x) (Product y z)  = No uninhabited
   decEq (Base x) (Tuple n xs)   = No uninhabited
   decEq (Base x) (Record r)     = No uninhabited
   decEq (Base x) (Variant v)    = No uninhabited
@@ -171,31 +146,15 @@ DecEq Ty where
   decEq Unit (Arr x y)      = No uninhabited
   decEq Unit (Base x)       = No uninhabited
   decEq Unit Unit           = Yes Refl
-  decEq Unit (Product x y)  = No uninhabited
   decEq Unit (Tuple n xs)   = No uninhabited
   decEq Unit (Record r)     = No uninhabited
   decEq Unit (Variant v)    = No uninhabited
   decEq Unit (List x)       = No uninhabited
 
-  decEq (Product x y) Bool      = No uninhabited
-  decEq (Product x y) (Arr z w) = No uninhabited
-  decEq (Product x y) (Base z)  = No uninhabited
-  decEq (Product x y) Unit      = No uninhabited
-  decEq (Product x y) (Product z w) = case assert_total (decEq x z) of
-    (Yes Refl) => case assert_total (decEq y w) of
-      (Yes Refl      ) => Yes Refl
-      (No  y_is_not_w) => No (\assumeProductOK => y_is_not_w (snd (productInjective assumeProductOK)))
-    (No x_is_not_z) => No (\assumeProductOK => x_is_not_z (fst (productInjective assumeProductOK)))
-  decEq (Product x y) (Tuple n xs)  = No uninhabited
-  decEq (Product x y) (Record r)    = No uninhabited
-  decEq (Product x y) (Variant v)   = No uninhabited
-  decEq (Product x y) (List z)      = No uninhabited
-
   decEq (Tuple n xs) Bool          = No uninhabited
   decEq (Tuple n xs) (Arr x y)     = No uninhabited
   decEq (Tuple n xs) (Base x)      = No uninhabited
   decEq (Tuple n xs) Unit          = No uninhabited
-  decEq (Tuple n xs) (Product x y) = No uninhabited
   decEq (Tuple n xs) (Tuple k ys) = case assert_total (decEq n k) of
     (Yes Refl) => case assert_total (decEq xs ys) of
       (Yes Refl)         => Yes Refl
@@ -209,7 +168,6 @@ DecEq Ty where
   decEq (Record r) (Arr x y)      = No uninhabited
   decEq (Record r) (Base x)       = No uninhabited
   decEq (Record r) Unit           = No uninhabited
-  decEq (Record r) (Product x y)  = No uninhabited
   decEq (Record r) (Tuple n xs)   = No uninhabited
   decEq (Record r) (Record x) = case assert_total (decEq r x) of
     (Yes Refl      ) => Yes Refl
@@ -221,7 +179,6 @@ DecEq Ty where
   decEq (Variant v) (Arr x y)     = No uninhabited
   decEq (Variant v) (Base x)      = No uninhabited
   decEq (Variant v) Unit          = No uninhabited
-  decEq (Variant v) (Product x y) = No uninhabited
   decEq (Variant v) (Tuple n xs)  = No uninhabited
   decEq (Variant v) (Record r)    = No uninhabited
   decEq (Variant v) (Variant x) = case assert_total (decEq v x) of
@@ -233,7 +190,6 @@ DecEq Ty where
   decEq (List x) (Arr y z)      = No uninhabited
   decEq (List x) (Base y)       = No uninhabited
   decEq (List x) Unit           = No uninhabited
-  decEq (List x) (Product y z)  = No uninhabited
   decEq (List x) (Tuple n xs)   = No uninhabited
   decEq (List x) (Record r)     = No uninhabited
   decEq (List x) (Variant v)    = No uninhabited

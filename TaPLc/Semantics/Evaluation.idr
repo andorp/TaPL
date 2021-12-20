@@ -78,37 +78,6 @@ data Evaluation : Tm -> Tm -> Type where
     -------------------------------------------
     Evaluation (Let fi x t t2) (Let fi c t' t2)
 
-  EPairBeta1 :
-             Value v1 -> Value v2           ->
-    ------------------------------------------
-    Evaluation (First fi1 (Pair fi2 v1 v2)) v1
-  
-  EPairBeta2 :
-              Value v1 -> Value v2           ->
-    -------------------------------------------
-    Evaluation (Second fi1 (Pair fi2 v1 v2)) v2
-
-  EProj1 :
-               Evaluation t t'         ->
-    -------------------------------------
-    Evaluation (First fi t) (First fi t')
-
-  EProj2 :
-                Evaluation t t'          ->
-    ---------------------------------------
-    Evaluation (Second fi t) (Second fi t')
-
-  EPair1 :
-                 Evaluation t1 t1'           ->
-    -------------------------------------------
-    Evaluation (Pair fi t1 t2) (Pair fi t1' t2)
-
-  EPair2 :
-                      Value v1               ->
-                 Evaluation t2 t2'           ->
-    -------------------------------------------
-    Evaluation (Pair fi t1 t2) (Pair fi t1 t2')
-
   EProjTuple :
                    Value (Tuple fi2 n tms)                      ->
     --------------------------------------------------------------

@@ -1,7 +1,8 @@
 module Main
 
-import TaPL.Chapter3
+import TaPLc.Semantics.Evaluation
+import TaPLc.Typing.Inference
+-- import TaPL.Chapter11
 
-main : IO ()
-main = do
-  putStrLn "[x] Chapter3"
+main : IO Unit
+main = putStrLn "Done...?"

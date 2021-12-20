@@ -25,10 +25,6 @@ data Tm : Type where
   As    : (fi : Info) -> (t : Tm) -> (ty : Ty)                      -> Tm
   Let   : (fi : Info) -> (n : Name) -> (t : Tm) -> (b : Tm)         -> Tm
   
-  Pair  : (fi : Info) -> (p1,p2 : Tm)                               -> Tm
-  First  : (fi : Info) -> (t : Tm)                                  -> Tm
-  Second : (fi : Info) -> (t : Tm)                                  -> Tm
-
   Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)              -> Tm
   Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)       -> Tm
 
@@ -56,6 +52,5 @@ namespace Value
     Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
     Cons    : Value (Cons fi ty h t)
-    Pair    : Value v1 -> Value v2                                -> Value (Pair fi v1 v2)
     Tuple   : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
     Record  : (r : Record Tm) -> ForEach r.values Value           -> Value (Record fi r)

@@ -1,4 +1,4 @@
-module TaPLc.TypeInference.Inference
+module TaPLc.Typing.Inference
 
 import Data.Vect
 import Decidable.Equality
@@ -11,7 +11,7 @@ import TaPLc.IR.Context
 import TaPLc.IR.Variant
 import TaPLc.IR.Record
 import TaPLc.IR.UniqueNames
-import TaPLc.TypeInference.TypingRules
+import TaPLc.Typing.Rules
 import TaPLc.Data.Vect
 import TaPLc.Data.NonZero
 
@@ -164,29 +164,6 @@ mutual
     (ty1 ** tDeriv) <- inferType ctx t
     (ty2 ** bDeriv) <- inferType (addBinding n ty1 ctx) b
     pure $ (ty2 ** TLet fi tDeriv bDeriv)
-
-  inferType ctx (Pair fi t1 t2) = do
-    (ty1 ** t1Deriv) <- inferType ctx t1
-    (ty2 ** t2Deriv) <- inferType ctx t2
-    pure $ (Product ty1 ty2 ** TPair fi t1Deriv t2Deriv)
-
-  inferType ctx (First fi t) = do
-    (Product ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (wt ** wrongDeriv) => Error fi
-          [ DerivInfo wrongDeriv
-          , FoundType wt
-          , Message "Found type is different than product"
-          ]
-    pure (ty1 ** TProj1 fi tDeriv)
-
-  inferType ctx (Second fi t) = do
-    (Product ty1 ty2 ** tDeriv) <- inferType ctx t
-      | (wt ** wrongDeriv) => Error fi
-          [ DerivInfo wrongDeriv
-          , FoundType wt
-          , Message "Found type is different than product"
-          ]
-    pure (ty2 ** TProj2 fi tDeriv)
 
   inferType ctx (Tuple fi n tms) = do
     (tys ** tty) <- inferTypes ctx tms

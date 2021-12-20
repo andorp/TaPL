@@ -1,4 +1,4 @@
-module TaPLc.TypeInference.TypingRules
+module TaPLc.Typing.Rules
 
 import Data.Vect
 
@@ -96,21 +96,6 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     (gamma |- (t1 <:> ty1)) -> ((gamma :< (x,VarBind ty1)) |- t2 <:> ty2) ->
     ------------------------------------------------------------------------
                        gamma |- Let fi x t1 t2 <:> ty2
-
-  TPair : (fi : Info) ->
-    (gamma |- (t1 <:> ty1)) -> (gamma |- (t2 <:> ty2)) ->
-    -----------------------------------------------------
-          gamma |- Pair fi t1 t2 <:> Product ty1 ty2
-
-  TProj1 : (fi : Info) ->
-    (gamma |- (t1 <:> Product ty1 ty2)) ->
-    --------------------------------------
-          gamma |- First fi t1 <:> ty1
-
-  TProj2 : (fi : Info) ->
-    (gamma |- (t1 <:> Product ty1 ty2)) ->
-    --------------------------------------
-         gamma |- Second fi t1 <:> ty2
 
   TTuple : (fi : Info) ->
            Derivations gamma ts tys     ->
