@@ -1,5 +1,6 @@
 module TaPL.Chapter14
 
+import Data.List
 import Decidable.Equality
 
 Name : Type
@@ -193,16 +194,18 @@ data Substitution : Type where
   Subst : (x : Name) -> (s : Tm) -> Substitution
 
 substitution : Substitution -> Tm -> Tm
--- substitution (Subst x s) (Var v) with (x == v)
---   _ | True  = s
---   _ | False = Var v
--- substitution (Subst x s) (Lam y t) with (x == y)
---   _ | False with (contains y (freeVars s))
---     _ | False = Lam y (substitution (Subst x s) t)
---     _ | True  = Lam y t
---   _ | True  = Lam y t
--- substitution (Subst x s) (App t1 t2)
---   = App (substitution (Subst x s) t1) (substitution (Subst x s) t2)
+substitution (Subst var s) t = subst [] t
+  where
+    subst : List Name -> Tm -> Tm
+    subst xs (Var fi i) = case inBounds i xs of
+      Yes found => case index i xs == var of
+        False => Var fi i
+        True  => s
+      No notFound => Var fi i -- This shouldn't happen. Improve subst later on.
+    subst xs (Abs fi y ty t)  = Abs fi y ty (subst (y :: xs) t)
+    subst xs (App fi t1 t2)   = App fi (subst xs t1) (subst xs t2)
+    subst xs (Error fi m ty)  = Error fi m ty
+    subst xs (Try fi t1 t2)   = Try fi (subst xs t1) (subst xs t2)
 
 -- Operational semantics
 namespace Evaluation
