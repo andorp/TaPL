@@ -19,8 +19,7 @@ data InContext : Nat -> Ty -> Context -> Type where
   Here  : InContext 0 ty (ctx :< (n, VarBind ty))
   There : InContext n ty ctx -> InContext (S n) ty (ctx :< b)
 
-export Uninhabited (InContext 0     _ Lin) where uninhabited _ impossible
-export Uninhabited (InContext (S _) _ Lin) where uninhabited _ impossible
+export Uninhabited (InContext _ _ Lin) where uninhabited _ impossible
 
 total
 public export

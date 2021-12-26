@@ -150,16 +150,6 @@ mutual
     (ty2 ** t2Deriv) <- inferType ctx t2
     pure (ty2 ** TSeq fi t1Deriv t2Deriv)
 
-  inferType ctx (As fi t ty) = do
-    (ty1 ** tDeriv) <- inferType ctx t
-    let Yes Refl = decEq ty ty1
-        | No _ => Error fi
-            [ DerivInfo tDeriv
-            , TypeMissmatch ty ty1
-            , Message "Found type is different than ascribed type"
-            ]
-    pure (ty ** TAscribe fi tDeriv)
-
   inferType ctx (Let fi n t b) = do
     (ty1 ** tDeriv) <- inferType ctx t
     (ty2 ** bDeriv) <- inferType (addBinding n ty1 ctx) b

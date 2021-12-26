@@ -22,9 +22,9 @@ data Tm : Type where
   Unit  : (fi : Info)                                               -> Tm
 
   Seq   : (fi : Info) -> (t1, t2 : Tm)                              -> Tm
-  As    : (fi : Info) -> (t : Tm) -> (ty : Ty)                      -> Tm
   Let   : (fi : Info) -> (n : Name) -> (t : Tm) -> (b : Tm)         -> Tm
   
+  -- TODO: Add Tuple datatype, similar to records
   Tuple : (fi : Info) -> (n : Nat) -> (ti : Vect n Tm)              -> Tm
   Proj  : (fi : Info) -> (t : Tm) -> (n : Nat) -> (i : Fin n)       -> Tm
 
@@ -51,6 +51,76 @@ namespace Value
     False   : Value (False fi)
     Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
-    Cons    : Value (Cons fi ty h t)
-    Tuple   : {n : Nat} -> {tms : Vect n Tm} -> ForEach tms Value -> Value (Tuple fi n tms)
+    Cons    : (Value h) -> (Value t) -> Value (Cons fi ty h t)
+    Tuple   : {n : Nat} -> {0 tms : Vect n Tm} -> (vs : ForEach tms Value) -> Value (Tuple fi n tms)
     Record  : (r : Record Tm) -> ForEach r.values Value           -> Value (Record fi r)
+    Variant : Value t                                             -> Value (Variant fi tag t ty)
+
+export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
+export Uninhabited (Value (Var _ _))          where uninhabited _ impossible
+export Uninhabited (Value (App _ _ _))        where uninhabited _ impossible
+export Uninhabited (Value (Seq _ _ _))        where uninhabited _ impossible
+export Uninhabited (Value (Let _ _ _ _))      where uninhabited _ impossible
+export Uninhabited (Value (Proj _ _ n i))     where uninhabited _ impossible
+export Uninhabited (Value (ProjField _ _ _))  where uninhabited _ impossible
+export Uninhabited (Value (Case _ _ _))       where uninhabited _ impossible
+export Uninhabited (Value (Fix _ _))          where uninhabited _ impossible
+export Uninhabited (Value (IsNil _ _ _))      where uninhabited _ impossible
+export Uninhabited (Value (Head _ _ _))       where uninhabited _ impossible
+export Uninhabited (Value (Tail _ _ _))       where uninhabited _ impossible
+
+mutual
+
+  ||| A term must be a value or not.
+  |||
+  ||| Being able to state that a Tm is a Value or not closes out the third
+  ||| option where we can't decide on this property. The existence of such
+  ||| property is used in the evaluation of a term which builds on it.
+  ||| During the evaluation, which can be represented as a tree structure
+  ||| the leafs must be end in leaf nodes.
+  public export total
+  isValue : (t : Tm) -> Dec (Value t)
+  isValue (True fi)         = Yes True
+  isValue (False fi)        = Yes False
+  isValue (If fi p t e)     = No uninhabited
+  isValue (Var fi i)        = No uninhabited
+  isValue (Abs fi var ty t) = Yes Abs
+  isValue (App fi t1 t2)    = No uninhabited
+  isValue (Unit fi)         = Yes Unit
+  isValue (Seq fi t1 t2)    = No uninhabited
+  isValue (Let fi n t b)    = No uninhabited
+  isValue (Tuple fi n tms)  = case forEachIsValue tms of
+    (Yes tmsAreValues)   => Yes (Tuple tmsAreValues)
+    (No tmsAreNotValues) => No (\case (Tuple tmsValues) => tmsAreNotValues tmsValues)
+  isValue (Proj fi t n i)   = No uninhabited
+  isValue (Record fi r)     = case (assert_total (forEachIsValue r.values)) of
+      (Yes fieldsAreValues)   => Yes (Record r fieldsAreValues)
+      (No fieldsAreNotValues) => No (\case (Record r fieldsAsValues) => fieldsAreNotValues fieldsAsValues)
+  isValue (ProjField fi field t)  = No uninhabited
+  isValue (Variant fi tag t ty)   = case isValue t of
+    (Yes tIsValue)    => Yes (Variant tIsValue)
+    (No tIsNotValue)  => No (\case (Variant tValue) => tIsNotValue tValue)
+  isValue (Case fi t alts)  = No uninhabited
+  isValue (Fix fi t)        = No uninhabited
+  isValue (Nil fi ty)       = Yes Nil
+  isValue (Cons fi ty h t)  = case isValue h of
+    (Yes hIsValue) => case isValue t of
+      (Yes tIsNotValue) => Yes (Cons hIsValue tIsNotValue)
+      (No tIsNotValue) => No (\case
+        (Cons assumeHValue assumeTValue) => tIsNotValue assumeTValue)
+    (No hIsNotValue) => No (\case
+      (Cons assumeHValue assumeTValue) => hIsNotValue assumeHValue)
+  isValue (IsNil fi ty t)   = No uninhabited
+  isValue (Head fi ty t)    = No uninhabited
+  isValue (Tail fi ty t)    = No uninhabited
+
+  public export total
+  forEachIsValue : (xs : Vect n Tm) -> Dec (ForEach xs Value)
+  forEachIsValue [] = Yes []
+  forEachIsValue (x :: xs) = case isValue x of
+    (Yes xIsValue) => case forEachIsValue xs of
+      (Yes xsAreValues) => Yes (xIsValue :: xsAreValues)
+      (No xsAreNotValues) => No (\case
+        (xValue :: xsValues) => xsAreNotValues xsValues)
+    (No xIsNotValue) => No (\case
+      (xValue :: xsValues) => xIsNotValue xValue)

@@ -15,6 +15,10 @@ record Record (a : Type) where
   values        : Vect size a
   uniqueFields  : UniqueNames size fields
 
+export
+Functor Record where
+  map f r = record { values $= map f } r
+
 public export
 data InRecord : String -> a -> Vect n String -> Vect n a -> Type where
   Here  : InRecord f x (f :: fs) (x :: xs)

@@ -43,9 +43,18 @@ namespace Derivations
 
   ||| Type derivation for record fields
   public export
-    data Derivations : Context -> Vect n Tm -> Vect n Ty -> Type where
-      Nil  : Derivations ctx [] []
-      (::) : Derivation ctx t ty -> Derivations ctx ts tys -> Derivations ctx (t :: ts) (ty :: tys)
+  data Derivations : Context -> Vect n Tm -> Vect n Ty -> Type where
+    Nil  : Derivations ctx [] []
+    (::) : Derivation ctx t ty -> Derivations ctx ts tys -> Derivations ctx (t :: ts) (ty :: tys)
+
+  public export
+  index
+    :  {n : Nat} -> {gamma : Context} -> {tms : Vect n Tm} -> {tys : Vect n Ty}
+    -> (i : Fin n)
+    -> Derivations gamma tms tys
+    -> (gamma |- (index i tms) <:> index i tys)
+  index FZ     ((MkDerivation t ty deriv) :: xs) = deriv
+  index (FS i) (x :: xs)                         = index i xs
 
 public export
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
@@ -61,6 +70,7 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
    gamma |- Abs fi1 x ty1 tm2 <:> Arr ty1 ty2
 
   TApp : (fi : Info) -> -- Elimination rule for Arr
+                             {ty11 : Ty}                        ->
     (gamma |- tm1 <:> Arr ty11 ty12) -> (gamma |- tm2 <:> ty11) ->
     -------------------------------------------------------------- 
                     gamma |- App fi tm1 tm2 <:> ty12
@@ -87,12 +97,8 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     --------------------------------------------------
             gamma |- Seq fi t1 t2 <:> ty2
 
-  TAscribe : (fi : Info) ->
-        (gamma |- t1 <:> ty1)  ->
-    -----------------------------
-    gamma |- As fi t1 ty1 <:> ty1
-
   TLet : (fi : Info) ->
+                                {ty1 : Ty}                                ->
     (gamma |- (t1 <:> ty1)) -> ((gamma :< (x,VarBind ty1)) |- t2 <:> ty2) ->
     ------------------------------------------------------------------------
                        gamma |- Let fi x t1 t2 <:> ty2
@@ -103,6 +109,8 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     gamma |- Tuple fi n ts <:> Tuple n tys
 
   TProj : (fi : Info) ->
+                  {n : Nat} -> {i : Fin n} ->
+                 {tys : Vect n Ty}           ->
              gamma |- t <:> Tuple n tys      ->
     -------------------------------------------
     gamma |- Proj fi t n i <:> Vect.index i tys
@@ -113,7 +121,7 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     --------------------------------------------------------------------------------
     gamma |- Record fi (MkRecord n fields ts u) <:> Record (MkRecord n fields tys u)
 
-  TRProj : (fi : Info) ->
+  TRProj : (fi : Info) -> {fields : Vect n String} -> {u : UniqueNames n fields} ->
     gamma |- t <:> Record (MkRecord n fields tys u) -> InRecord field ty fields tys ->
     ----------------------------------------------------------------------------------
                           gamma |- ProjField fi field t <:> ty

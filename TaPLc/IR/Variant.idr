@@ -18,6 +18,10 @@ record Variant (a : Type) where
   nonEmpty    : NonZero size
 
 export
+Functor Variant where
+  map f v = record { info $= map f } v
+
+export
 variantInjective
   :  {v,w : Variant a} -> (v = w)
   -> (v.size = w.size, v.tags ~=~ w.tags, v.info ~=~ w.info, v.uniqueTags ~=~ w.uniqueTags, v.nonEmpty ~=~ w.nonEmpty)
