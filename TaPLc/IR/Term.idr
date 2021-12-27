@@ -52,9 +52,9 @@ namespace Value
     Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
     Cons    : (Value h) -> (Value t) -> Value (Cons fi ty h t)
-    Tuple   : {n : Nat} -> {0 tms : Vect n Tm} -> (vs : ForEach tms Value) -> Value (Tuple fi n tms)
-    Record  : (r : Record Tm) -> ForEach r.values Value           -> Value (Record fi r)
-    Variant : Value t                                             -> Value (Variant fi tag t ty)
+    Tuple   : {n : Nat} -> {0 tms : Vect n Tm} -> (vs : ForEach tms Value) -> Value (Tuple fi n tms) -- TODO: Remove fields?
+    Record  : ForEach vs Value -> Value (Record fi (MkRecord n fs vs u))
+    Variant : Value t          -> Value (Variant fi tag t ty)
 
 export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
 export Uninhabited (Value (Var _ _))          where uninhabited _ impossible
@@ -93,9 +93,9 @@ mutual
     (Yes tmsAreValues)   => Yes (Tuple tmsAreValues)
     (No tmsAreNotValues) => No (\case (Tuple tmsValues) => tmsAreNotValues tmsValues)
   isValue (Proj fi t n i)   = No uninhabited
-  isValue (Record fi r)     = case (assert_total (forEachIsValue r.values)) of
-      (Yes fieldsAreValues)   => Yes (Record r fieldsAreValues)
-      (No fieldsAreNotValues) => No (\case (Record r fieldsAsValues) => fieldsAreNotValues fieldsAsValues)
+  isValue (Record fi (MkRecord n fields values u)) = case (assert_total (forEachIsValue values)) of
+      (Yes fieldsAreValues)   => Yes (Record fieldsAreValues)
+      (No fieldsAreNotValues) => No (\case (Record fieldsAsValues) => fieldsAreNotValues fieldsAsValues)
   isValue (ProjField fi field t)  = No uninhabited
   isValue (Variant fi tag t ty)   = case isValue t of
     (Yes tIsValue)    => Yes (Variant tIsValue)

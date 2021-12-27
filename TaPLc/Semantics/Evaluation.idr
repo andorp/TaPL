@@ -21,7 +21,7 @@ import TaPLc.Semantics.Substituition
 
 data Progress : Tm -> Type where
   Value  : (fi : Info) -> (0 t : Tm) -> (tValue : Value t) -> Progress t
-  Step   : (fi : Info) -> (0 tNotValue : Not (Value t)) -> (t' : Tm) -> (0 tEval : Evaluation t t') -> Progress t
+  Step   : (fi : Info) -> (0 tNotValue : Not (Value t)) -> (0 t' : Tm) -> (0 tEval : Evaluation t t') -> Progress t
   RtmErr : (fi : Info) -> (msg : String) -> (trace : SnocList Info) -> Progress t
 
 namespace EvalMonad
@@ -69,11 +69,18 @@ namespace EvalMonad
   (>>=) : (Eval a) -> (a -> Eval b) -> Eval b
   (>>=) = Bind
 
-namespace TupleValues
+namespace ValuePrefix
 
+  ||| Value preffix descriptor of a Tm sotring vector.
+  |||
+  ||| For tuples and records we need to know if the terms in these structrues are
+  ||| already evaluated to Values or just there is a possible preffix of values,
+  ||| as the evaluation as a process for evaluating parameters one-by-one, from left to right.
   public export
   data Descriptor : (Vect n Tm) -> Type where
-    Values : ForEach xs Value -> Descriptor xs
+    ||| Every element in the term vector is actually a value.
+    Values      : ForEach xs Value -> Descriptor xs
+    ||| There is at least one element in term vector which is not a value, and its index is 'i'.
     HasNonValue : (i : Fin n) -> (valuePrefix : ForEach (Vect.take i xs) Value) -> Descriptor xs
 
   export
@@ -135,9 +142,9 @@ mutual
       (Step _ t1NotValue t1' t1Eval) => Step fi uninhabited (Let fi x1 t1' t2) (ELet t1NotValue t1Eval)
       (RtmErr t m ts)                => RtmErr fi m (ts :< t)
   evalp (Tuple fi n ts) (Tuple n tys) (TTuple fi tyDerivations) = do
-    case TupleValues.descriptor ts of
-      Values es =>
-        pure $ Value fi (Tuple fi n ts) (Tuple es)
+    case ValuePrefix.descriptor ts of
+      Values vs =>
+        pure $ Value fi (Tuple fi n ts) (Tuple vs)
       HasNonValue idx valuePrefix => do
         -- Reason for assert_total:
         -- - The index function is total for Data.Vect
@@ -148,7 +155,8 @@ mutual
             -- When evaluate an intermediate step, which we determined to be a value, it should
             -- produce Step, and never Value constructor. If for some reason Value constructor
             -- is happened we have an issue somewhere in the evaluator.
-            RtmErr fi "Internal error: tuple ith element resulted in Value instead of Evaluation Step." [<]
+            -- TODO: Use a different error, with stack-trace
+            RtmErr fi "Internal error: tuple \{show idx} element resulted in Value instead of Evaluation Step." [<]
           (Step  _ tNotValue t' tEval) =>
             Step fi
               (\case
@@ -165,10 +173,48 @@ mutual
         (No contra) => RtmErr fi "Projection of tuple of wrong arity. Expected \{show n}, but got \{show n}" [<] -- Why, how?
       (Step  _ tNotValue t' tEval)  => Step fi uninhabited (Proj fi t' n i) (EProj tNotValue tEval)
       (RtmErr t msg ts)             => RtmErr fi msg (ts :< t)
-  evalp (Record fi (MkRecord n fields ts u)) (Record (MkRecord n fields tys u)) (TRcd fi fieldDerivations) = do
-    ?progress_rhs_13
-  evalp (ProjField fi field t) ty (TRProj fi x y) = do
-    ?progress_rhs_14
+  evalp (Record fi (MkRecord n fields ts u)) (Record (MkRecord n fields tys u)) (TRcd fi fieldDerivations) =
+    case ValuePrefix.descriptor ts of
+      (Values vs)
+        => pure $ Value fi (Record fi (MkRecord n fields ts u)) (Record vs)
+      (HasNonValue idx valuePrefix) => do
+        -- Reason for assert_total:
+        -- - The index function is total for Data.Vect
+        -- - The ts and tys are structurally smaller than the original Tuple parameter.
+        p <- assert_total $ evaluation (index idx ts) (index idx tys) (index idx fieldDerivations)
+        pure $ case p of
+          (Value _ (index idx ts) tValue) => do
+            -- When evaluate an intermediate step, which we determined to be a value, it should
+            -- produce Step, and never Value constructor. If for some reason Value constructor
+            -- is happened we have an issue somewhere in the evaluator.
+            -- TODO: Use a different error, with stack trace included
+            RtmErr fi "Internal error: record \{show idx} element resulted in Value instead of Evaluation Step." [<]
+          (Step _ tNotValue t' tEval) =>
+            Step fi
+              (\case
+                (Record vs) => tNotValue (index idx vs))
+              (Record fi (MkRecord n fields (Vect.replaceAt idx t' ts) u))
+              (ERcd idx valuePrefix tNotValue tEval)
+          (RtmErr t msg ts) => RtmErr fi msg (ts :< t)
+  evalp (ProjField fi field t) _ (TRProj fi {n} {tys} {fields} {u} {idx} fieldInRecord tDeriv) = do
+    p <- evaluation t (Record (MkRecord n fields tys u)) tDeriv
+    case p of
+      (Value _ (Record fi (MkRecord n1 fields1 tms1 u1)) (Record vs)) => do
+        let Yes Refl = decEq n n1
+            | No _ => pure $ RtmErr fi "Internal error: evaluation of record value resulted in different sized records. Expected \{show n}, but got \{show n1}." [<]
+        let Yes Refl = decEq fields fields1
+            | No _ => pure $ RtmErr fi "Internal error: evaluation of record value resulted in different fields in records. Expected \{show fields}, but got \{show fields1}." [<]
+        pure $ Step fi
+          uninhabited
+          (Vect.index idx tms1)
+          (EProjRec {inr=fieldInRecord} vs)
+      (Step _ tNotValue t' tEval) =>
+        pure $ Step fi
+          uninhabited
+          (ProjField fi field t')
+          (EProjField tNotValue tEval)
+      (RtmErr t msg ts) =>
+        pure $ RtmErr fi msg (ts :< t)
   evalp (Variant fi tag tj (Variant (MkVariant n tags tys u nz))) (Variant (MkVariant n tags tys u nz)) (TVariant fi x y z) = do
     ?progress_rhs_15
   evalp (Case fi t0 (MkVariant n tags alts u nz)) ty (TCase fi x y) = do

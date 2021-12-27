@@ -185,13 +185,13 @@ mutual
           , DerivInfo wrongDeriv
           , Message "Expected record type."
           ]
-    let Yes (ty ** inRec) = inRecord f fields tys
+    let Yes (idx ** inRec) = inRecord f fields tys
         | No _ => Error fi
             [ FoundType rty
             , DerivInfo tDeriv
             , Message "Record doesn't have \{f} field."
             ]
-    pure (ty ** TRProj fi tDeriv inRec)
+    pure (Vect.index idx tys ** TRProj fi inRec tDeriv)
 
   inferType ctx (Variant fi tag tj ty) = do
     let (Variant (MkVariant n tags tys u nz)) = ty

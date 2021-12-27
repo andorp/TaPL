@@ -121,10 +121,16 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
     --------------------------------------------------------------------------------
     gamma |- Record fi (MkRecord n fields ts u) <:> Record (MkRecord n fields tys u)
 
-  TRProj : (fi : Info) -> {fields : Vect n String} -> {u : UniqueNames n fields} ->
-    gamma |- t <:> Record (MkRecord n fields tys u) -> InRecord field ty fields tys ->
-    ----------------------------------------------------------------------------------
-                          gamma |- ProjField fi field t <:> ty
+  TRProj : (fi : Info) ->
+                            {n : Nat}                       ->
+                         {tys : Vect n Ty}                  -> 
+                     {fields : Vect n String}               ->
+                    {u : UniqueNames n fields}              ->
+                         {idx : Fin n}                      ->
+                   InRecord idx field fields                ->
+         gamma |- t <:> Record (MkRecord n fields tys u)    -> 
+    ----------------------------------------------------------
+      gamma |- ProjField fi field t <:> (Vect.index idx tys)
 
   TVariant : (fi : Info) ->
                                             {n : Nat} -> {nz : NonZero n}                                       ->

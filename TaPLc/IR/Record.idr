@@ -3,7 +3,7 @@ module TaPLc.IR.Record
 import Data.Vect
 import Decidable.Equality
 
-import TaPLc.IR.UniqueNames
+import public TaPLc.IR.UniqueNames
 
 %default total
 
@@ -20,22 +20,26 @@ Functor Record where
   map f r = record { values $= map f } r
 
 public export
-data InRecord : String -> a -> Vect n String -> Vect n a -> Type where
-  Here  : InRecord f x (f :: fs) (x :: xs)
-  There : InRecord f x fs xs -> InRecord f x (g :: fs) (y :: xs)
+data InRecord : (i : Fin n) -> String -> Vect n String -> Type where
+  Here  : InRecord FZ f (f :: fs)
+  There : InRecord i f fs -> InRecord (FS i) f (g :: fs)
 
-export Uninhabited (InRecord f a [] []) where uninhabited _ impossible
+export Uninhabited (InRecord _ f []) where uninhabited _ impossible
 
 public export
-inRecord : (field : String) -> (fs : Vect n String) -> (xs : Vect n a) -> Dec (DPair a $ \x => InRecord field x fs xs)
+inRecord
+  :  (field : String)
+  -> (fs : Vect n String)
+  -> (xs : Vect n a)
+  -> Dec (DPair (Fin n) $ \i => InRecord i field fs)
 inRecord field [] [] = No (\assumeInRecord => uninhabited (snd assumeInRecord))
 inRecord field (f :: fs) (x :: xs) = case decEq f field of
-   (Yes Refl) => Yes (x ** Here)
+   (Yes Refl) => Yes (FZ ** Here)
    (No field_is_not_f) => case inRecord field fs xs of
-      (Yes (x ** there)) => Yes (x ** There there)
+      (Yes (i ** there)) => Yes ((FS i) ** There there)
       (No notThere) => No (\assumeThere => case assumeThere of
-        (MkDPair x Here)          => field_is_not_f Refl
-        (MkDPair x (There there)) => notThere (x ** there))
+        (FZ     ** Here)          => field_is_not_f Refl
+        ((FS i) ** (There there)) => notThere (i ** there))
 
 export
 recordInjective

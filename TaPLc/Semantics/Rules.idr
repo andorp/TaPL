@@ -84,10 +84,14 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
      Evaluation (Tuple fi z zs) (Tuple fi z (Vect.replaceAt idx t' zs))
 
   EProjRec :
-    {r : Record Tm} -> {inr : InRecord field v r.fields r.values}  ->
-                        (vs : ForEach r.values Value)              ->
-    -----------------------------------------------------------------                        
-             Evaluation (ProjField fi1 field (Record fi2 r)) v
+                {r : Record Tm}             ->
+              {idx : Fin r.size}            ->
+       {inr : InRecord idx field r.fields}  ->
+          (vs : ForEach r.values Value)     ->
+    ------------------------------------------
+      Evaluation
+        (ProjField fi1 field (Record fi2 r))
+        (Vect.index idx r.values)
 
   EProjField :
                          Not (Value t)                     ->
@@ -96,15 +100,17 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     Evaluation (ProjField fi field t) (ProjField fi field t')
 
   ERcd :
-                 {n,m : Nat}                                                           ->
-                 {lvs : Vect n String} -> {f : String} -> {lts : Vect m String}        ->
-                 {vs  : Vect n   Tm  } -> {t :   Tm  } -> {ts  : Vect m   Tm  }        ->
-                      {u : UniqueNames (n + (1 + m)) (lvs ++ (f :: lts))}              ->
-                           ForEach vs Value -> Evaluation t t'                         ->
-    -------------------------------------------------------------------------------------
-        Evaluation
-          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t  :: ts)) u))
-          (Record fi (MkRecord (n + (1 + m)) (lvs ++ (f :: lts)) (vs ++ (t' :: ts)) u))
+                                 {n : Nat}                           ->
+              {names : Vect n String} -> {fields : Vect n Tm}        ->
+                        {u : UniqueNames n names}                    ->
+                              (idx : Fin n)                          ->
+                    ForEach (Vect.take idx fields) Value             ->
+                     Not (Value (Vect.index idx fields))             ->
+                    Evaluation (Vect.index idx fields) t'            ->
+    -------------------------------------------------------------------
+     Evaluation
+       (Record fi (MkRecord n names fields u))
+       (Record fi (MkRecord n names (Vect.replaceAt idx t' fields) u))
 
   ECase :
                     Not (Value t0)              ->
