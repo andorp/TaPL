@@ -82,7 +82,7 @@ cannonicalForms (False fi) v Bool (TFalse fi)
   = Right (MkDPair fi Refl)
 cannonicalForms (Unit fi) v Unit (TUnit fi)
   = MkDPair fi Refl
-cannonicalForms (Tuple fi n ts) v (Tuple n tys) (TTuple fi x)
+cannonicalForms (Tuple fi n ts) v (Tuple n tys) (TTuple fi _ x)
   = MkDPair fi (MkDPair n (MkDPair ts Refl))
 cannonicalForms (Nil fi ty) v (List ty) (TNil fi)
   = Left (MkDPair fi (MkDPair ty Refl))

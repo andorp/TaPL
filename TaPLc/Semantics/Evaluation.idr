@@ -136,9 +136,8 @@ mutual
       (Value _ t1 t1Value)           => Step fi uninhabited (substituition (x1,t1) t2) (ELetV t1Value)
       (Step _ t1NotValue t1' t1Eval) => Step fi uninhabited (Let fi x1 t1' t2) (ELet t1NotValue t1Eval)
       (RtmErr t m ts)                => RtmErr fi m (ts :< t)
-  evalp (Tuple fi 0 []) (Tuple 0 []) (TTuple fi x) = 
-    pure $ RtmErr fi "Internal error; Empty tuple is not supported."  [<]
-  evalp (Tuple fi (S k) ts) (Tuple (S k) tys) (TTuple fi tyDerivations) = do
+  evalp (Tuple fi 0 _) (Tuple 0 _) (TTuple fi nonZero x) = absurd (uninhabited nonZero)
+  evalp (Tuple fi (S k) ts) (Tuple (S k) tys) (TTuple fi nonZero tyDerivations) = do
     case TupleValues.descriptor ts of
       Values es =>
         pure $ Value fi (Tuple fi (S k) ts) (Tuple es)
@@ -147,19 +146,20 @@ mutual
         -- - The index function is total for Data.Vect
         -- - The ts and tys are structurally smaller than the original Tuple parameter.
         p <- assert_total $ evaluation (index idx ts) (index idx tys) (index idx tyDerivations)
-        case p of
-          (Value _ (index idx ts) tValue) => do
-            -- When evaluate an intermediate step, which we determined to to be a value, it should
+        pure $ case p of
+          (Value _ (index idx ts) tValue) =>
+            -- When evaluate an intermediate step, which we determined to be a value, it should
             -- produce Step, and never Value constructor. If for some reason Value constructor
             -- is happened we have an issue somewhere in the evaluator.
-            pure $ RtmErr fi "Internal error: tuple ith element resulted in Value instead of Evaluation Step." [<]
-          (Step  _ tNotValue t' tEval) => do
-            pure $ Step fi
+            RtmErr fi "Internal error: tuple ith element resulted in Value instead of Evaluation Step." [<]
+          (Step  _ tNotValue t' tEval) =>
+            Step fi
                     (\case
                        (Tuple assumeTupleValues) => tNotValue (index idx assumeTupleValues))
                     (Tuple fi (S k) (Vect.replaceAt idx t' ts))
                     (ETuple idx valuePrefix tNotValue tEval)
-          (RtmErr t msg ts) => pure $ RtmErr fi msg (ts :< t)
+          (RtmErr t msg ts) => 
+            RtmErr fi msg (ts :< t)
   evalp (Proj fi t n i) _ (TProj fi {tys} tpDeriv) = do
     p <- evaluation t (Tuple n tys) tpDeriv
     pure $ case p of

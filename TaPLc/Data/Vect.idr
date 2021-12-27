@@ -38,12 +38,15 @@ namespace ForEach
   index (FS i) (x :: xs) = index i xs
 
 ||| Take the elements of a vector, before the given index.
-|||
-||| Example: take FZ [0..9] = []
-|||  -- as index points to the first element, and before that there are no elements.
-||| Example: take (FS FZ) [0..9] = [0]
-||| Example: take FZ [] impossible
 public export
 take : (i : Fin m) -> Vect m a -> Vect (finToNat i) a
 take FZ     (x :: xs) = []
 take (FS f) (x :: xs) = (x :: take f xs)
+
+namespace TakeExamples
+
+  0 example1 : take FZ [0,1,2,3,4] === []
+  example1 = Refl
+
+  0 example2 : take (FS FZ) [1,2] === [1]
+  example2 = Refl

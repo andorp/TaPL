@@ -156,8 +156,16 @@ mutual
     pure $ (ty2 ** TLet fi tDeriv bDeriv)
 
   inferType ctx (Tuple fi n tms) = do
-    (tys ** tty) <- inferTypes ctx tms
-    pure (Tuple n tys ** TTuple fi tty)
+    case n of
+      Z => Error fi
+            [ Message "Found tuple of zero elements."
+            , Message "Empty tuples are not supported."
+            , Message "You may want to use the Unit type instead."
+            ]
+      (S k) => do
+        (tys ** tty) <- inferTypes ctx tms
+        let nonZero = %search
+        pure (Tuple (S k) tys ** TTuple fi nonZero tty)
 
   inferType ctx (Proj fi t n idx) = do
     (Tuple m tys ** tDeriv) <- inferType ctx t
