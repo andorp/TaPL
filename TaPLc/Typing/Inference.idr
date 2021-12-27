@@ -185,7 +185,7 @@ mutual
           , DerivInfo wrongDeriv
           , Message "Expected record type."
           ]
-    let Yes (idx ** inRec) = inRecord f fields tys
+    let Yes (idx ** inRec) = inRecord f fields
         | No _ => Error fi
             [ FoundType rty
             , DerivInfo tDeriv

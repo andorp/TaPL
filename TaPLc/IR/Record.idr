@@ -30,12 +30,11 @@ public export
 inRecord
   :  (field : String)
   -> (fs : Vect n String)
-  -> (xs : Vect n a)
   -> Dec (DPair (Fin n) $ \i => InRecord i field fs)
-inRecord field [] [] = No (\assumeInRecord => uninhabited (snd assumeInRecord))
-inRecord field (f :: fs) (x :: xs) = case decEq f field of
+inRecord field [] = No (\assumeInRecord => uninhabited (snd assumeInRecord))
+inRecord field (f :: fs) = case decEq f field of
    (Yes Refl) => Yes (FZ ** Here)
-   (No field_is_not_f) => case inRecord field fs xs of
+   (No field_is_not_f) => case inRecord field fs of
       (Yes (i ** there)) => Yes ((FS i) ** There there)
       (No notThere) => No (\assumeThere => case assumeThere of
         (FZ     ** Here)          => field_is_not_f Refl
