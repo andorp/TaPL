@@ -72,17 +72,15 @@ namespace EvalMonad
 namespace TupleValues
 
   public export
-  data Descriptor : (Vect (S n) Tm) -> Type where
+  data Descriptor : (Vect n Tm) -> Type where
     Values : ForEach xs Value -> Descriptor xs
-    HasNonValue : (i : Fin (S n)) -> (valuePrefix : ForEach (Vect.take i xs) Value) -> Descriptor xs
+    HasNonValue : (i : Fin n) -> (valuePrefix : ForEach (Vect.take i xs) Value) -> Descriptor xs
 
   export
-  descriptor : (xs : Vect (S n) Tm) -> Descriptor xs
-  descriptor (x :: []) = case isValue x of
-    Yes xIsValue   => Values [xIsValue]
-    No xIsNotValue => HasNonValue FZ []
-  descriptor (x :: (y :: ys)) = case isValue x of
-    Yes xIsValue => case descriptor (y :: ys) of
+  descriptor : (xs : Vect n Tm) -> Descriptor xs
+  descriptor []        = Values []
+  descriptor (x :: xs) = case isValue x of
+    Yes xIsValue => case descriptor xs of
       (HasNonValue i zs) => HasNonValue (FS i) (xIsValue :: zs)
       Values es          => Values (xIsValue :: es)
     No xIsNotValue => HasNonValue FZ []
@@ -136,11 +134,10 @@ mutual
       (Value _ t1 t1Value)           => Step fi uninhabited (substituition (x1,t1) t2) (ELetV t1Value)
       (Step _ t1NotValue t1' t1Eval) => Step fi uninhabited (Let fi x1 t1' t2) (ELet t1NotValue t1Eval)
       (RtmErr t m ts)                => RtmErr fi m (ts :< t)
-  evalp (Tuple fi 0 _) (Tuple 0 _) (TTuple fi nonZero x) = absurd (uninhabited nonZero)
-  evalp (Tuple fi (S k) ts) (Tuple (S k) tys) (TTuple fi nonZero tyDerivations) = do
+  evalp (Tuple fi n ts) (Tuple n tys) (TTuple fi tyDerivations) = do
     case TupleValues.descriptor ts of
       Values es =>
-        pure $ Value fi (Tuple fi (S k) ts) (Tuple es)
+        pure $ Value fi (Tuple fi n ts) (Tuple es)
       HasNonValue idx valuePrefix => do
         -- Reason for assert_total:
         -- - The index function is total for Data.Vect
@@ -154,10 +151,10 @@ mutual
             RtmErr fi "Internal error: tuple ith element resulted in Value instead of Evaluation Step." [<]
           (Step  _ tNotValue t' tEval) =>
             Step fi
-                    (\case
-                       (Tuple assumeTupleValues) => tNotValue (index idx assumeTupleValues))
-                    (Tuple fi (S k) (Vect.replaceAt idx t' ts))
-                    (ETuple idx valuePrefix tNotValue tEval)
+              (\case
+                  (Tuple assumeTupleValues) => tNotValue (index idx assumeTupleValues))
+              (Tuple fi n (Vect.replaceAt idx t' ts))
+              (ETuple idx valuePrefix tNotValue tEval)
           (RtmErr t msg ts) => 
             RtmErr fi msg (ts :< t)
   evalp (Proj fi t n i) _ (TProj fi {tys} tpDeriv) = do
@@ -168,7 +165,7 @@ mutual
         (No contra) => RtmErr fi "Projection of tuple of wrong arity. Expected \{show n}, but got \{show n}" [<] -- Why, how?
       (Step  _ tNotValue t' tEval)  => Step fi uninhabited (Proj fi t' n i) (EProj tNotValue tEval)
       (RtmErr t msg ts)             => RtmErr fi msg (ts :< t)
-  evalp (Record fi (MkRecord n fields ts u)) (Record (MkRecord n fields tys u)) (TRcd fi x) = do
+  evalp (Record fi (MkRecord n fields ts u)) (Record (MkRecord n fields tys u)) (TRcd fi fieldDerivations) = do
     ?progress_rhs_13
   evalp (ProjField fi field t) ty (TRProj fi x y) = do
     ?progress_rhs_14

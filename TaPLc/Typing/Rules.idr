@@ -104,10 +104,6 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
                        gamma |- Let fi x t1 t2 <:> ty2
 
   TTuple : (fi : Info) ->
-                    {n : Nat}           ->
-                 {ts : Vect n Tm}       ->
-                {tys : Vect n Ty}       ->
-                    NonZero n           ->
            Derivations gamma ts tys     ->
     --------------------------------------
     gamma |- Tuple fi n ts <:> Tuple n tys
