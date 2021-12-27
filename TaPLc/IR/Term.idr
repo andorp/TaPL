@@ -51,10 +51,10 @@ namespace Value
     False   : Value (False fi)
     Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
-    Cons    : (Value h) -> (Value t) -> Value (Cons fi ty h t)
-    Tuple   : {n : Nat} -> {0 tms : Vect n Tm} -> (vs : ForEach tms Value) -> Value (Tuple fi n tms) -- TODO: Remove fields?
-    Record  : ForEach vs Value -> Value (Record fi (MkRecord n fs vs u))
-    Variant : Value t          -> Value (Variant fi tag t ty)
+    Cons    : (Value h) -> (Value t)   -> Value (Cons fi ty h t)
+    Tuple   : (vs : ForEach tms Value) -> Value (Tuple fi n tms)
+    Record  : ForEach vs Value         -> Value (Record fi (MkRecord n fs vs u))
+    Variant : Value t                  -> Value (Variant fi tag t ty)
 
 export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
 export Uninhabited (Value (Var _ _))          where uninhabited _ impossible
