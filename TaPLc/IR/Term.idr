@@ -93,7 +93,7 @@ mutual
     (Yes tmsAreValues)   => Yes (Tuple tmsAreValues)
     (No tmsAreNotValues) => No (\case (Tuple tmsValues) => tmsAreNotValues tmsValues)
   isValue (Proj fi t n i)   = No uninhabited
-  isValue (Record fi (MkRecord n fields values u)) = case (assert_total (forEachIsValue values)) of
+  isValue (Record fi (MkRecord n fields values u)) = case forEachIsValue values of
       (Yes fieldsAreValues)   => Yes (Record fieldsAreValues)
       (No fieldsAreNotValues) => No (\case (Record fieldsAsValues) => fieldsAreNotValues fieldsAsValues)
   isValue (ProjField fi field t)  = No uninhabited

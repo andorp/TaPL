@@ -98,8 +98,8 @@ DecEq Ty where
   decEq Bool (List x)       = No uninhabited
 
   decEq (Arr x y) Bool      = No uninhabited
-  decEq (Arr x y) (Arr z w) = case assert_total (decEq x z) of
-    (Yes Refl) => case assert_total (decEq y w) of
+  decEq (Arr x y) (Arr z w) = case decEq x z of
+    (Yes Refl) => case decEq y w of
       (Yes Refl      ) => Yes Refl 
       (No  y_is_not_w) => No (\assumeArrOk => (y_is_not_w (snd (funInjective assumeArrOk))))
     (No x_is_not_z) => No (\assumeArrOk => (x_is_not_z (fst (funInjective assumeArrOk))))
@@ -120,7 +120,7 @@ DecEq Ty where
   decEq (Tuple n xs) Bool          = No uninhabited
   decEq (Tuple n xs) (Arr x y)     = No uninhabited
   decEq (Tuple n xs) Unit          = No uninhabited
-  decEq (Tuple n xs) (Tuple k ys) = case assert_total (decEq n k) of
+  decEq (Tuple n xs) (Tuple k ys) = case decEq n k of
     (Yes Refl) => case assert_total (decEq xs ys) of
       (Yes Refl)         => Yes Refl
       (No  xs_is_not_ys) => No (\assumeTupleOK => xs_is_not_ys (snd (tupleInjective assumeTupleOK)))
@@ -155,6 +155,6 @@ DecEq Ty where
   decEq (List x) (Tuple n xs)   = No uninhabited
   decEq (List x) (Record r)     = No uninhabited
   decEq (List x) (Variant v)    = No uninhabited
-  decEq (List x) (List y) = case assert_total (decEq x y) of
+  decEq (List x) (List y) = case decEq x y of
     (Yes Refl      ) => Yes Refl
     (No  x_is_not_y) => No (\assumeListOk => x_is_not_y (listInjective assumeListOk))
