@@ -201,9 +201,19 @@ mutual
     case p of
       (Value _ (Record fi (MkRecord n1 fields1 tms1 u1)) (Record vs)) => do
         let Yes Refl = decEq n n1
-            | No _ => pure $ RtmErr fi "Internal error: evaluation of record value resulted in different sized records. Expected \{show n}, but got \{show n1}." [<]
+            | No _ => pure $ RtmErr fi
+                        """
+                        Internal error: evaluation of record value resulted in different sized records.
+                        Expected \{show n}, but got \{show n1}.
+                        """
+                        [<]
         let Yes Refl = decEq fields fields1
-            | No _ => pure $ RtmErr fi "Internal error: evaluation of record value resulted in different fields in records. Expected \{show fields}, but got \{show fields1}." [<]
+            | No _ => pure $ RtmErr fi
+                        """
+                        Internal error: evaluation of record value resulted in different fields in records.
+                        Expected \{show fields}, but got \{show fields1}.
+                        """
+                        [<]
         pure $ Step fi
           uninhabited
           (Vect.index idx tms1)
@@ -229,8 +239,23 @@ mutual
           (EVariant tNotValue tEval)
       (RtmErr t msg ts) =>
         RtmErr fi msg (ts :< t)
-  evalp (Case fi t0 (MkVariant n tags alts u nz)) ty (TCase fi x y) = do
-    ?progress_rhs_16
+  evalp (Case fi t0 (MkVariant n tags alts u nz)) ty (TCase fi t0Deriv variantDerivs) = do
+    p <- evaluation t0 _ t0Deriv
+    case p of
+      (Value _ (Variant fi tag t ty) (Variant tValue)) => do
+        let Yes (idx ** inTags) = inNames tag tags
+            | No _ => pure $ RtmErr fi "Internal error; \{tag} is not found in \{show tags}" [<]
+        pure $ Step fi
+                uninhabited
+                (substituition (fst (index idx alts),t) (snd (index idx alts)))
+                (ECaseVariant idx inTags)
+      (Step _ tNotValue t' tEval) =>
+        pure $ Step fi
+                uninhabited
+                (Case fi t' (MkVariant n tags alts u nz))
+                (ECase tNotValue tEval)
+      (RtmErr t msg ts) =>
+        pure $ RtmErr fi msg (ts :< t)
   evalp (Fix fi t1) ty (TFix fi t1Deriv) = do
     pure $ case !(evaluation t1 (Arr ty ty) t1Deriv) of
       (Value _ (Abs fia va tya tma) Abs) => Step fi uninhabited (substituition (va, Fix fi (Abs fia va tya tma)) tma) EFixBeta

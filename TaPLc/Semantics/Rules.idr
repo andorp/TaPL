@@ -13,13 +13,6 @@ import TaPLc.IR.UniqueNames
 import TaPLc.Data.Vect
 import TaPLc.Semantics.Substituition
 
-namespace InVariant
-
-  public export
-  data InVariant : String -> Name -> Tm -> Vect n String -> Vect n (Name,Tm) -> Type where
-    Here  : InVariant tag x tm (tag :: tgs) ((x,tm) :: alts)
-    There : InVariant tag x tm tgs alts -> InVariant tag x tm (tag :: tgs) ((y,tn) :: alts)
-
 
 public export
 data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
@@ -113,10 +106,10 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
        (Record fi (MkRecord n names (Vect.replaceAt idx t' fields) u))
 
   ECase :
-                    Not (Value t0)              ->
-                  Evaluation t0 t0'             ->
-    ----------------------------------------------
-    Evaluation (Case fi t0 tgs) (Case fi t0' tgs)
+                    Not (Value t)              ->
+                   Evaluation t t'             ->
+    ---------------------------------------------
+    Evaluation (Case fi t tgs) (Case fi t' tgs)
 
   EVariant :
                          Not (Value t)                   ->
@@ -125,14 +118,14 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     Evaluation (Variant fi tag t ty) (Variant fi tag t' ty)
 
   ECaseVariant :
-                             {n : Nat} -> {nz : NonZero n}                            ->
-    {tags : Vect n String} -> {alts : Vect n (Name, Tm)} -> {u : UniqueNames n tags}  ->
-                              ForEach alts (Value . Builtin.snd)                      ->
-                              InVariant tag x vj tags alts                            ->
-    ------------------------------------------------------------------------------------
-              Evaluation
-                (Case fi1 (Variant fi2 tag t ty) (MkVariant n tags alts u nz))
-                (substituition (x,vj) tj)
+                            (idx : Fin n)                            ->
+                          InNames idx tg tgs                         ->
+    -------------------------------------------------------------------
+      Evaluation
+        (Case fi1 (Variant fi2 tg vj ty) (MkVariant n tgs alts u nz))
+        (substituition
+          (Builtin.fst (index idx alts),vj)
+          (Builtin.snd (index idx alts)))
 
   EFix :
               Not (Value t)        ->
