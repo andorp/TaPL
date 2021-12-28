@@ -77,7 +77,7 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
   ETuple :
                           {z : Nat} -> {zs : Vect z Tm}               ->
                                 (idx : Fin z)                         ->
-                      ForEach (Vect.take idx zs) Value                ->
+                    ForEach (Vect.Take.take idx zs) Value             ->
                         Not (Value (Vect.index idx zs))               ->
                       Evaluation (Vect.index idx zs) t'               ->
     --------------------------------------------------------------------
@@ -86,7 +86,7 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
   EProjRec :
                 {r : Record Tm}             ->
               {idx : Fin r.size}            ->
-       {inr : InRecord idx field r.fields}  ->
+        {inr : InNames idx field r.fields}  ->
           (vs : ForEach r.values Value)     ->
     ------------------------------------------
       Evaluation
@@ -104,7 +104,7 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
               {names : Vect n String} -> {fields : Vect n Tm}        ->
                         {u : UniqueNames n names}                    ->
                               (idx : Fin n)                          ->
-                    ForEach (Vect.take idx fields) Value             ->
+                  ForEach (Vect.Take.take idx fields) Value          ->
                      Not (Value (Vect.index idx fields))             ->
                     Evaluation (Vect.index idx fields) t'            ->
     -------------------------------------------------------------------

@@ -60,24 +60,6 @@ Monad Infer where
   join m  = Bind m id
   m >>= k = Bind m k
 
-
-namespace VariantFieldIndex
-
-  total
-  fieldIndexGo : (n : Nat) -> (tag : String) -> (tags : Vect n String) -> (infos : Vect n a) -> Dec (i : Nat ** (Index tag i tags, (x : a ** Index x i infos)))
-  fieldIndexGo 0       tag []        [] = No (\assumeIndex => uninhabited (fst (snd assumeIndex)))
-  fieldIndexGo (S len) tag (x :: xs) (y :: ys) = case decEq x tag of
-    Yes Refl => Yes (0 ** (Here, (y ** Here)))
-    No x_is_not_tag => case fieldIndexGo len tag xs ys of
-      (Yes (MkDPair j (z, MkDPair k w))) => Yes (MkDPair (S j) (There z, MkDPair k (There w)))
-      (No notThere) => No (\assumeThere => case assumeThere of
-        (MkDPair 0 (Here, (MkDPair y Here))) => x_is_not_tag Refl
-        (MkDPair (S n) ((There z), (MkDPair k (There w)))) => notThere (MkDPair n (z, MkDPair k w)))
-
-  total export
-  fieldIndex : (tag : String) -> (v : Variant a) -> Dec (i : Nat ** (Index tag i v.tags, (x : a ** Index x i v.info)))
-  fieldIndex tag v = fieldIndexGo v.size tag v.tags v.info
-
 mutual
 
   covering
@@ -185,7 +167,7 @@ mutual
           , DerivInfo wrongDeriv
           , Message "Expected record type."
           ]
-    let Yes (idx ** inRec) = inRecord f fields
+    let Yes (idx ** inRec) = inNames f fields
         | No _ => Error fi
             [ FoundType rty
             , DerivInfo tDeriv
@@ -200,19 +182,19 @@ mutual
           , Message "Should have been type of Variant"
           ]
     (tyj1 ** tDeriv) <- inferType ctx tj
-    let Yes (j ** (idx1, (tyj2 ** idx2))) = fieldIndex tag (MkVariant n tags tys u nz)
+    let Yes (idx ** inTags) = inNames tag tags
         | No _ => Error fi
             [ FoundType tyj1
             , DerivInfo tDeriv
             , Message "\{tag} is not found in the Variant"
             ]
-    let Yes Refl = decEq tyj2 tyj1
+    let Yes Refl = decEq tyj1 (index idx tys)
         | No _ => Error fi
             [ DerivInfo tDeriv
-            , TypeMissmatch tyj2 tyj1
+            , TypeMissmatch (index idx tys) tyj1
             , Message "Found type in variant was different than expected"
             ]
-    pure ((Variant (MkVariant n tags tys u nz)) ** TVariant fi idx1 idx2 tDeriv)
+    pure (Variant (MkVariant n tags tys u nz) ** TVariant fi idx inTags tDeriv)
 
   inferType ctx (Case fi t0 (MkVariant n tags alts u nz)) = do
     (Variant (MkVariant n_t0 tags_t0 tys_t0 u_t0 nz_t0) ** t0Deriv) <- inferType ctx t0

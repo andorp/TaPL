@@ -81,7 +81,7 @@ namespace ValuePrefix
     ||| Every element in the term vector is actually a value.
     Values      : ForEach xs Value -> Descriptor xs
     ||| There is at least one element in term vector which is not a value, and its index is 'i'.
-    HasNonValue : (i : Fin n) -> (valuePrefix : ForEach (Vect.take i xs) Value) -> Descriptor xs
+    HasNonValue : (i : Fin n) -> (valuePrefix : ForEach (Vect.Take.take i xs) Value) -> Descriptor xs
 
   export
   descriptor : (xs : Vect n Tm) -> Descriptor xs
@@ -215,8 +215,20 @@ mutual
           (EProjField tNotValue tEval)
       (RtmErr t msg ts) =>
         pure $ RtmErr fi msg (ts :< t)
-  evalp (Variant fi tag tj (Variant (MkVariant n tags tys u nz))) (Variant (MkVariant n tags tys u nz)) (TVariant fi x y z) = do
-    ?progress_rhs_15
+  evalp (Variant fi tag tj (Variant (MkVariant n tags tys u nz)))
+        (Variant (MkVariant n tags tys u nz))
+        (TVariant fi tagIndex nameIndex tjDeriv) = do
+    p <- evaluation tj _ tjDeriv
+    pure $ case p of
+      (Value _ tj tValue) =>
+        Value fi _ (Variant tValue)
+      (Step _ tNotValue t' tEval) =>
+        Step fi
+          (\case (Variant assumeValue) => tNotValue assumeValue)
+          (Variant fi tag t' (Variant (MkVariant n tags tys u nz)))
+          (EVariant tNotValue tEval)
+      (RtmErr t msg ts) =>
+        RtmErr fi msg (ts :< t)
   evalp (Case fi t0 (MkVariant n tags alts u nz)) ty (TCase fi x y) = do
     ?progress_rhs_16
   evalp (Fix fi t1) ty (TFix fi t1Deriv) = do
