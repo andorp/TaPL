@@ -28,11 +28,14 @@ substituition (var, s) = subst []
     subst xs (Unit      fi          ) = Unit fi
     subst xs (Seq       fi t1 t2    ) = Seq fi (subst xs t1) (subst xs t2)
     subst xs (Let       fi n t b    ) = Let fi n (subst xs t) (subst xs b)
+    -- Reason for assert_total: map function on Vect is total and ti is structurally smaller then Tuple
     subst xs (Tuple     fi n ti     ) = Tuple fi n (assert_total (map (subst xs) ti))
     subst xs (Proj      fi vt n i   ) = Proj fi (subst xs vt) n i
+    -- Reason for assert_total: map function on Vect is total and rt is structurally smaller then Record
     subst xs (Record    fi rt       ) = Record fi (assert_total (map (subst xs) rt))
     subst xs (ProjField fi field t  ) = ProjField fi field (subst xs t)
     subst xs (Variant   fi tag t ty ) = Variant fi tag (subst xs t) ty
+    -- Reason for assert_total: map function on Vect is total and alts is structurally smaller then Case
     subst xs (Case      fi t alts   ) = Case fi (subst xs t) (assert_total (map (\(tag, tm) => (tag, subst xs tm)) alts))
     subst xs (Fix       fi t        ) = Fix fi (subst xs t)
     subst xs (Nil       fi ty       ) = Nil fi ty
@@ -40,3 +43,8 @@ substituition (var, s) = subst []
     subst xs (IsNil     fi ty t     ) = IsNil fi ty (subst xs t)
     subst xs (Head      fi ty t     ) = Head fi ty (subst xs t)
     subst xs (Tail      fi ty t     ) = Tail fi ty (subst xs t)
+    subst xs (LitNat    fi l        ) = LitNat fi l
+    -- Reason for assert_total: map function on Vect is total and args is structurally smaller then FFI
+    subst xs (FFI       fi c args   ) = FFI fi c (assert_total (map (subst xs) args))
+    subst xs (FFIVal    fi v        ) = FFIVal fi v
+    subst xs (ConvertFFI fi bt t    ) = ConvertFFI fi bt (subst xs t)

@@ -1,6 +1,7 @@
 module TaPLc.Typing.Inference
 
 import Data.Vect
+import Data.List
 import Decidable.Equality
 
 import TaPLc.IR.Type
@@ -14,6 +15,7 @@ import TaPLc.IR.UniqueNames
 import TaPLc.Typing.Rules
 import TaPLc.Data.Vect
 import TaPLc.Data.NonZero
+import TaPLc.IR.FFI
 
 %default total
 
@@ -59,6 +61,18 @@ Applicative Infer where
 Monad Infer where
   join m  = Bind m id
   m >>= k = Bind m k
+
+
+isFFIType : (t : Ty) -> Dec (bt : BaseType ** FFI bt t)
+isFFIType Bool          = Yes (_ ** Bool)
+isFFIType (Arr x y)     = No (\(MkDPair a b) => uninhabited b)
+isFFIType Unit          = No (\(MkDPair a b) => uninhabited b)
+isFFIType (Tuple n xs)  = No (\(MkDPair a b) => uninhabited b)
+isFFIType (Record r)    = No (\(MkDPair a b) => uninhabited b)
+isFFIType (Variant v)   = No (\(MkDPair a b) => uninhabited b)
+isFFIType (List x)      = No (\(MkDPair a b) => uninhabited b)
+isFFIType LitNat        = Yes (_ ** Nat)
+isFFIType (Base x)      = Yes (_ ** Base)
 
 mutual
 
@@ -318,6 +332,47 @@ mutual
             , Message "Expected a different type of list"
             ]
     pure (List ty ** TTail fi tDeriv)
+
+  inferType ctx (LitNat fi l) = do
+    pure (LitNat ** TLitNat fi)
+  
+  inferType ctx (FFI fi (MkFFICall funName n pBaseTypes retBasetype) args) = do
+    (tys ** tysDeriv) <- inferTypes ctx args
+    let Yes Refl = decEq tys (map Base pBaseTypes)
+        | No _ => Error fi
+            ([ Message "Different type for FFI Call"
+             , Message "One or more type differ for parameters"
+             ] ++ (concat $
+             zipWith3
+              (\ty, baseType, (_ ** _ ** (MkDerivation _ _ deriv)) => case decEq ty (Base baseType) of
+                Yes _ => []
+                No  _ => [ TypeMissmatch (Base baseType) ty
+                         , DerivInfo deriv
+                         ])
+              (toList tys)
+              (toList pBaseTypes)
+              (toList tysDeriv)
+             ))
+    let checkedArgsTys : Derivations ctx args (map Base pBaseTypes) = ?help1
+    pure (Base retBasetype ** TFFICall fi tysDeriv)
+  
+  inferType ctx (FFIVal fi (MkFFIVal baseType _)) = do
+    pure (Base baseType ** TFFIVal fi)
+  
+  inferType ctx (ConvertFFI fi baseType t) = do
+    (ty ** tDeriv) <- inferType ctx t
+    let (Yes (bt ** b)) = isFFIType ty
+        | No _ => Error fi
+                    [ Message "Expected FFI type, got different."
+                    , FoundType ty
+                    , DerivInfo tDeriv
+                    ]
+    let Yes Refl = decEq bt baseType
+        | No _ => Error fi
+                    [ Message "FFI representational type differs."
+                    , TypeMissmatch (Base baseType) (Base bt)
+                    ]
+    pure (Base baseType ** TConvertFFI fi b tDeriv)
 
   covering
   inferTypes : (ctx : Context) -> (tms : Vect n Tm) -> Infer (tys : Vect n Ty ** Derivations ctx tms tys)

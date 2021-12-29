@@ -10,6 +10,7 @@ import TaPLc.IR.Name
 import TaPLc.IR.UniqueNames
 import TaPLc.IR.Record
 import TaPLc.IR.Variant
+import TaPLc.IR.FFI
 import TaPLc.Data.Vect
 
 %default total
@@ -55,6 +56,31 @@ namespace Derivations
     -> (gamma |- (index i tms) <:> index i tys)
   index FZ     ((MkDerivation t ty deriv) :: xs) = deriv
   index (FS i) (x :: xs)                         = index i xs
+
+  export
+  toList : Derivations ctx ts tys -> List (t : Tm ** (ty : Ty ** Derivation ctx t ty))
+  toList [] = []
+  toList ((MkDerivation t ty deriv) :: ds) = (t ** ty ** MkDerivation t ty deriv) :: toList ds
+
+namespace FFI
+
+  public export
+  data FFI : BaseType -> Ty -> Type where
+    Bool : FFI "Builtin.Bool" Bool
+    Nat  : FFI "Builtin.Nat"  LitNat
+    Base : {tyName : BaseType} -> FFI tyName (Base tyName)
+
+  export Uninhabited (FFI _ (Arr _ _))    where uninhabited _ impossible
+  export Uninhabited (FFI _ Unit     )    where uninhabited _ impossible
+  export Uninhabited (FFI _ (Tuple n x))  where uninhabited _ impossible
+  export Uninhabited (FFI _ (Record _))   where uninhabited _ impossible
+  export Uninhabited (FFI _ (Variant _))  where uninhabited _ impossible
+  export Uninhabited (FFI _ (List _))     where uninhabited _ impossible
+
+  -- public export
+  -- data FFIDerivations : Vect n BaseType -> Vect n Ty -> Type where
+  --   Nil  : FFIDerivations [] []
+  --   (::) : FFI f t -> FFIDerivations fs ts -> FFIDerivations (f :: fs) (t :: ts)
 
 public export
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
@@ -176,3 +202,23 @@ data (|-) : (0 _ : Context) -> TypeStatement -> Type where
           (gamma |- t <:> List ty)   ->
     -----------------------------------
       gamma |- Tail fi ty t <:> List ty
+
+  TLitNat : (fi : Info) ->
+    ---------------------------------
+    gamma |- LitNat fi l <:> LitNat
+
+  TFFICall : (fi : Info) ->
+         Derivations gamma args (Interfaces.map Base pms)      ->
+    -------------------------------------------------------------
+    gamma |- FFI fi (MkFFICall fun n pms ret) args <:> Base ret
+
+  TFFIVal : (fi : Info) ->
+    -----------------------------------------------------------
+    gamma |- FFIVal fi (MkFFIVal baseType sn) <:> Base baseType
+
+  TConvertFFI : (fi : Info) ->
+                       {ty : Ty}                     ->
+                     FFI baseType ty                 ->
+                    gamma |- t <:> ty                ->
+    ---------------------------------------------------
+    gamma |- ConvertFFI fi baseType t <:> Base baseType

@@ -17,6 +17,7 @@ import TaPLc.Typing.Rules
 import TaPLc.Semantics.CannonicalForm
 import TaPLc.Semantics.Rules
 import TaPLc.Semantics.Substituition
+import TaPLc.IR.FFI
 
 
 data Progress : Tm -> Type where
@@ -31,6 +32,8 @@ namespace EvalMonad
     Pure : (x : t) -> Eval t
     Bind : (Eval a) -> (a -> Eval b) -> Eval b
     OnProgress : {t : Tm} -> (p : Progress t) -> Eval Unit
+    FFICall : (fi : Info) -> {n : Nat} -> (c : FFICall n) -> (args : Vect n Tm) -> (0 fe : ForEach args Value) -> Eval (FFIVal (ffiCallRetType c))
+    ConvertFFIVal : (fi : Info) -> (t : Tm) -> (0 vt : Value t) -> (0 ft : FFI t) -> (b : BaseType) -> Eval (v : (FFIVal b) ** FFIConv t v)
 
   record EvalImpl (m : Type -> Type) where
     constructor MkEvalImpl
@@ -39,14 +42,19 @@ namespace EvalMonad
     onValue        : (fi : Info) -> {0 t : Tm} -> Value t -> m Unit
     onStep         : (fi : Info) -> {0 t,t' : Tm} -> (0 e : Evaluation t t') -> m Unit
     onRuntimeError : (fi : Info) -> (msg : String) -> (trace : SnocList Info) -> m Unit
+    ffiCall        : (fi : Info) -> {n : Nat} -> (c : FFICall n) -> (args : Vect n Tm) -> m (FFIVal (ffiCallRetType c))
+    convertFFIVal  : (fi : Info) -> (t : Tm) -> (0 vt : Value t) -> (0 ft : FFI t) -> (b : BaseType) -> m (v : (FFIVal b) ** FFIConv t v)
 
-  export
+  export covering
   evalInterpreter : (Monad m) => (EvalImpl m) -> Eval a -> m a
-  evalInterpreter i (Pure x)    = pure x
-  evalInterpreter i (Bind m k)  = evalInterpreter i m >>= (evalInterpreter i . k)
-  evalInterpreter i (OnProgress (Value fi t x)) = i.onValue fi x
-  evalInterpreter i (OnProgress (Step  fi f t' x)) = i.onStep fi x
-  evalInterpreter i (OnProgress (RtmErr fi msg trace)) = i.onRuntimeError fi msg trace
+  evalInterpreter i (Pure x)                            = pure x
+  evalInterpreter i (Bind m k)                          = evalInterpreter i m >>= (evalInterpreter i . k)
+  evalInterpreter i (OnProgress (Value fi t x))         = i.onValue fi x
+  evalInterpreter i (OnProgress (Step  fi f t' x))      = i.onStep fi x
+  evalInterpreter i (OnProgress (RtmErr fi msg trace))  = i.onRuntimeError fi msg trace
+  evalInterpreter i (FFICall fi c args fe)              = i.ffiCall fi c args
+  evalInterpreter i (ConvertFFIVal fi t vt ft b)        = i.convertFFIVal fi t vt ft b
+
   export
   Functor Eval where
     map f m = Bind m (Pure . f)
@@ -91,6 +99,8 @@ namespace ValuePrefix
       (HasNonValue i zs) => HasNonValue (FS i) (xIsValue :: zs)
       Values es          => Values (xIsValue :: es)
     No xIsNotValue => HasNonValue FZ []
+
+isFFIValue : (t : Tm) -> Dec (FFI t)
 
 mutual
 
@@ -141,7 +151,7 @@ mutual
       (Value _ t1 t1Value)           => Step fi uninhabited (substituition (x1,t1) t2) (ELetV t1Value)
       (Step _ t1NotValue t1' t1Eval) => Step fi uninhabited (Let fi x1 t1' t2) (ELet t1NotValue t1Eval)
       (RtmErr t m ts)                => RtmErr fi m (ts :< t)
-  evalp (Tuple fi n ts) (Tuple n tys) (TTuple fi tyDerivations) = do
+  evalp (Tuple fi n ts) (Tuple n tys) (TTuple fi tyDerivations) =
     case ValuePrefix.descriptor ts of
       Values vs =>
         pure $ Value fi (Tuple fi n ts) (Tuple vs)
@@ -303,3 +313,48 @@ mutual
       (Value _ (Cons fi2 ty hd tl) (Cons hdv tlv)) => Step fi uninhabited tl (ETailCons hdv tlv)
       (Step _ tNotValue t' tEval)                  => Step fi uninhabited (Tail fi ty t') (ETail tNotValue tEval)
       (RtmErr t msg ts)                            => RtmErr fi msg (ts :< t)
+  evalp (LitNat fi l) LitNat (TLitNat fi) =
+    pure $ Value fi (LitNat fi l) LitNat
+  evalp (FFI fi (MkFFICall f n pms ret) args) (Base ret) (TFFICall fi argsDeriv) =
+    case ValuePrefix.descriptor args of
+      (Values vs) => do
+        MkFFIVal ret so <- FFICall fi (MkFFICall f n pms ret) args vs
+        pure $ Step fi uninhabited (FFIVal fi (MkFFIVal ret so)) EFFICall
+      (HasNonValue idx valuePrefix) => do
+        -- Reason for assert_total:
+        -- - The index function is total for Data.Vect
+        -- - The args are structurally smaller than the original FFI parameter.
+        p <- assert_total $ evaluation (index idx args) _ (index idx argsDeriv)
+        pure $ case p of
+          (Value _ (index idx ts) tValue) => do
+            -- When evaluate an intermediate step, which we determined to be a value, it should
+            -- produce Step, and never Value constructor. If for some reason Value constructor
+            -- is happened we have an issue somewhere in the evaluator.
+            -- TODO: Use a different error, with stack trace included
+            RtmErr fi "Internal error: ffi call \{show idx} element resulted in Value instead of Evaluation Step." [<]
+          (Step _ tNotValue t' tEval) =>
+            Step fi
+              uninhabited
+              (FFI fi (MkFFICall f n pms ret) (Vect.replaceAt idx t' args))
+              (EFFICallArg idx valuePrefix tNotValue tEval)
+          (RtmErr t msg ts) => RtmErr fi msg (ts :< t)
+  evalp (FFIVal fi (MkFFIVal baseType sn)) (Base baseType) (TFFIVal fi) = 
+    pure $ Value fi (FFIVal fi (MkFFIVal baseType sn)) FFIVal
+  evalp (ConvertFFI fi baseType t) (Base baseType) (TConvertFFI fi ffiRet tDeriv) = do
+    p <- evaluation t _ tDeriv
+    case p of
+      (Value _ t tValue) => do
+        let Yes ffiVal = isFFIValue t
+            | No _ => pure $ RtmErr fi "" [<]
+        (MkFFIVal _ so ** ffiConv) <- ConvertFFIVal fi t tValue ffiVal baseType
+        pure $ Step fi
+                uninhabited
+                (FFIVal fi (MkFFIVal baseType so))
+                (EConvertVal tValue ffiVal ffiConv)
+      (Step _ tNotValue t' tEval) =>
+        pure $ Step fi
+                uninhabited
+                (ConvertFFI fi baseType t')
+                (EConvert tNotValue tEval)
+      (RtmErr t msg ts) =>
+        pure $ RtmErr fi msg (ts :< t)

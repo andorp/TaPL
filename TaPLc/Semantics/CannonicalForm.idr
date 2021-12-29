@@ -18,6 +18,7 @@ import TaPLc.IR.Variant
 import TaPLc.Data.Vect
 import TaPLc.IR.Context
 import TaPLc.Typing.Rules
+import TaPLc.IR.FFI
 
 %default total
 
@@ -63,6 +64,14 @@ CFList t = Either
             (fi : Info ** (ty : Ty ** (hd : Tm ** (tl : Tm ** (t = Cons fi ty hd tl)))))
 
 public export
+CFBase : BaseType -> Tm -> Type
+CFBase baseType t = (fi : Info ** (sn : Nat ** t = FFIVal fi (MkFFIVal baseType sn)))
+
+public export
+CFLitNat : Tm -> Type
+CFLitNat t = (fi : Info ** (l : Nat ** t = LitNat fi l))
+
+public export
 CanonicalFormTy : (t : Tm) -> (ty : Ty) -> Type
 CanonicalFormTy t Bool          = CFBool    t
 CanonicalFormTy t (Arr ty1 ty2) = CFArr t ty1
@@ -71,6 +80,8 @@ CanonicalFormTy t (Tuple n xs)  = CFTuple   t
 CanonicalFormTy t (Record r)    = CFRecord  t
 CanonicalFormTy t (Variant v)   = CFVariant t
 CanonicalFormTy t (List x)      = CFList    t
+CanonicalFormTy t LitNat        = CFLitNat  t
+CanonicalFormTy t (Base n)      = CFBase  n t
 
 public export
 cannonicalForms : (t : Tm) -> (v : Value t) -> (ty : Ty) -> (gamma |- (t <:> ty)) -> CanonicalFormTy t ty
@@ -94,3 +105,7 @@ cannonicalForms
 cannonicalForms
   (Variant fi tag tj (Variant (MkVariant n tags tys u nz))) v (Variant (MkVariant n tags tys u nz)) (TVariant fi x y z)
   = MkDPair fi (MkDPair tag (MkDPair tj (MkDPair (Variant (MkVariant n tags tys u nz)) Refl)))
+cannonicalForms (LitNat fi l) LitNat LitNat _
+  = (fi ** l ** Refl)
+cannonicalForms (FFIVal fi (MkFFIVal baseType sn)) FFIVal (Base baseType) (TFFIVal fi)
+  = (fi ** sn ** Refl)

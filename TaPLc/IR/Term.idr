@@ -8,8 +8,10 @@ import TaPLc.IR.Variant
 import TaPLc.IR.Name
 import TaPLc.IR.Info
 import TaPLc.Data.Vect
+import TaPLc.IR.FFI
 
 %default total
+
 
 public export
 data Tm : Type where
@@ -42,19 +44,40 @@ data Tm : Type where
   Head : (fi : Info) -> (ty : Ty) -> (t : Tm)                       -> Tm
   Tail : (fi : Info) -> (ty : Ty) -> (t : Tm)                       -> Tm
 
+  LitNat     : (fi : Info) -> (literal : Nat)                       -> Tm
+  ConvertFFI : (fi : Info) -> (baseType : BaseType) -> Tm           -> Tm
+  FFI        : (fi : Info) -> FFICall n -> (args : Vect n Tm)       -> Tm
+  FFIVal     : (fi : Info) -> FFIVal baseType                       -> Tm
+
+namespace FFIValue
+  public export
+  data FFI : Tm -> Type where
+    True   : FFI (True fi)
+    False  : FFI (False fi)
+    LitNat : FFI (LitNat fi lit)
+    FFIVal : FFI (FFIVal fi val)
+
+namespace BoolValue
+  public export
+  data Bool : Tm -> Type where
+    True  : Bool (True fi)
+    False : Bool (False fi)
+
 namespace Value
 
   public export
   data Value : Tm -> Type where
     Abs     : Value (Abs fi var ty t)
-    True    : Value (True fi)
-    False   : Value (False fi)
+    True    : Bool (True fi) => Value (True fi)
+    False   : Bool (False fi) => Value (False fi)
     Unit    : Value (Unit fi)
     Nil     : Value (Nil fi ty)
     Cons    : (Value h) -> (Value t)   -> Value (Cons fi ty h t)
     Tuple   : (vs : ForEach tms Value) -> Value (Tuple fi n tms)
     Record  : ForEach vs Value         -> Value (Record fi (MkRecord n fs vs u))
     Variant : Value t                  -> Value (Variant fi tag t ty)
+    LitNat  : Value (LitNat fi lit)
+    FFIVal  : Value (FFIVal fi val)
 
 export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
 export Uninhabited (Value (Var _ _))          where uninhabited _ impossible
@@ -68,6 +91,8 @@ export Uninhabited (Value (Fix _ _))          where uninhabited _ impossible
 export Uninhabited (Value (IsNil _ _ _))      where uninhabited _ impossible
 export Uninhabited (Value (Head _ _ _))       where uninhabited _ impossible
 export Uninhabited (Value (Tail _ _ _))       where uninhabited _ impossible
+export Uninhabited (Value (FFI _ c a))        where uninhabited _ impossible
+export Uninhabited (Value (ConvertFFI _ _ _)) where uninhabited _ impossible
 
 mutual
 
@@ -113,6 +138,10 @@ mutual
   isValue (IsNil fi ty t)   = No uninhabited
   isValue (Head fi ty t)    = No uninhabited
   isValue (Tail fi ty t)    = No uninhabited
+  isValue (LitNat fi l)     = Yes LitNat
+  isValue (FFI fi op args)  = No uninhabited
+  isValue (FFIVal fi val)   = Yes FFIVal
+  isValue (ConvertFFI _ _ _) = No uninhabited
 
   public export total
   forEachIsValue : (xs : Vect n Tm) -> Dec (ForEach xs Value)

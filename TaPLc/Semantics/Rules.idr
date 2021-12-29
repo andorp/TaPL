@@ -12,7 +12,10 @@ import TaPLc.IR.Variant
 import TaPLc.IR.UniqueNames
 import TaPLc.Data.Vect
 import TaPLc.Semantics.Substituition
+import TaPLc.IR.FFI
 
+public export
+data FFIConv : Tm -> FFIVal b -> Type where -- TODO
 
 public export
 data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
@@ -209,3 +212,28 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
                   Evaluation t1 t1'            ->
     ---------------------------------------------
     Evaluation (If fi t1 t2 t3) (If fi t1' t2 t3)
+
+  EFFICallArg :
+                              (idx : Fin n)                         ->
+                ForEach (Vect.Take.take idx args) Value             ->
+                    Not (Value (Vect.index idx args))               ->
+                   Evaluation (Vect.index idx args) t'              ->
+    ------------------------------------------------------------------
+    Evaluation (FFI fi c args) (FFI fi c (Vect.replaceAt idx t' args))
+  
+  EFFICall :
+    ------------------------------------------------------------------------------
+    Evaluation (FFI fi (MkFFICall f n pms ret) args) (FFIVal fi (MkFFIVal ret so))
+
+  EConvert :
+                               Not (Value t)                       ->
+                              Evaluation t t'                      ->
+    -----------------------------------------------------------------
+    Evaluation (ConvertFFI fi baseType t) (ConvertFFI fi baseType t')
+  
+  EConvertVal :
+                                     Value t                              ->
+                                      FFI t                               ->
+                      FFIConv t (MkFFIVal baseType so)                    ->
+    ------------------------------------------------------------------------
+    Evaluation (ConvertFFI fi baseType t) (FFIVal fi (MkFFIVal baseType so))
