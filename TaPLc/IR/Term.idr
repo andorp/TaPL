@@ -49,13 +49,93 @@ data Tm : Type where
   FFI        : (fi : Info) -> FFICall n -> (args : Vect n Tm)       -> Tm
   FFIVal     : (fi : Info) -> FFIVal baseType                       -> Tm
 
+-- Reasons for assert_total, Tm parameters are structurally smaller than their containing constructor.
+export
+Show Tm where
+  showPrec d (True fi) = showCon d "True" $ showArg fi
+  showPrec d (False fi) = showCon d "False" $ showArg fi
+  showPrec d (If fi p t e) = showCon d "If" $ showArg fi ++ assert_total (showArg p ++ showArg t ++ showArg e)
+  showPrec d (Var fi i) = showCon d "Var" $ showArg fi ++ showArg i
+  showPrec d (Abs fi var ty t) = showCon d "Abs" $ showArg fi ++ showArg var ++ showArg ty ++ assert_total (showArg t)
+  showPrec d (App fi t1 t2) = showCon d "App" $ showArg fi ++ assert_total (showArg t1 ++ showArg t2)
+  showPrec d (Unit fi) = showCon d "Unit" $ showArg fi
+  showPrec d (Seq fi t1 t2) = showCon d "Seq" $ showArg fi ++ assert_total (showArg t1 ++ showArg t2)
+  showPrec d (Let fi n t b) = showCon d "Let" $ showArg fi ++ showArg n ++ assert_total (showArg t ++ showArg b)
+  showPrec d (Tuple fi n ti) = showCon d "Tuple" $ showArg fi ++ showArg n ++ assert_total (showArg ti)
+  showPrec d (Proj fi t n i) = showCon d "Proj" $ showArg fi ++ assert_total (showArg t ++ showArg n ++ showArg i)
+  showPrec d (Record fi x) = showCon d "Record" $ showArg fi ++ assert_total (showArg x)
+  showPrec d (ProjField fi field t) = showCon d "ProjField" $ showArg fi ++ showArg field ++ assert_total (showArg t)
+  showPrec d (Variant fi tag t ty) = showCon d "Variant" $ showArg fi ++ showArg tag ++ assert_total (showArg t ++ showArg ty)
+  showPrec d (Case fi t alts) = showCon d "Case" $ showArg fi ++ assert_total (showArg t ++ showArg alts)
+  showPrec d (Fix fi t) = showCon d "Fix" $ showArg fi ++ assert_total (showArg t)
+  showPrec d (Nil fi ty) = showCon d "Nil" $ showArg fi ++ showArg ty
+  showPrec d (Cons fi ty h t) = showCon d "Cons" $ showArg fi ++ showArg ty ++ assert_total (showArg h ++ showArg t)
+  showPrec d (IsNil fi ty t) = showCon d "IsNil" $ showArg fi ++ showArg ty ++ assert_total (showArg t)
+  showPrec d (Head fi ty t) = showCon d "Head" $ showArg fi ++ showArg ty ++ assert_total (showArg t)
+  showPrec d (Tail fi ty t) = showCon d "Tail" $ showArg fi ++ showArg ty ++ assert_total (showArg t)
+  showPrec d (LitNat fi literal) = showCon d "LitNat" $ showArg fi ++ showArg literal
+  showPrec d (ConvertFFI fi baseType x) = showCon d "ConvertFFI" $ showArg fi ++ showArg baseType ++ assert_total (showArg x)
+  showPrec d (FFI fi x args) = showCon d "FFI" $ showArg fi ++ showArg x ++ assert_total (showArg args)
+  showPrec d (FFIVal fi x) = showCon d "FFIVal" $ showArg fi ++ showArg x
+
 namespace FFIValue
+
   public export
   data FFI : Tm -> Type where
     True   : FFI (True fi)
     False  : FFI (False fi)
     LitNat : FFI (LitNat fi lit)
     FFIVal : FFI (FFIVal fi val)
+
+  export Uninhabited (FFI (If _ _ _ _))       where uninhabited _ impossible
+  export Uninhabited (FFI (Var _ _))          where uninhabited _ impossible 
+  export Uninhabited (FFI (Abs _ _ _ _))      where uninhabited _ impossible
+  export Uninhabited (FFI (App _ _ _))        where uninhabited _ impossible
+  export Uninhabited (FFI (Unit _))           where uninhabited _ impossible
+  export Uninhabited (FFI (Seq _ _ _))        where uninhabited _ impossible
+  export Uninhabited (FFI (Let _ _ _ _))      where uninhabited _ impossible
+  export Uninhabited (FFI (Tuple _ a b))      where uninhabited _ impossible
+  export Uninhabited (FFI (Proj _ _ a b))     where uninhabited _ impossible
+  export Uninhabited (FFI (Record _ _))       where uninhabited _ impossible
+  export Uninhabited (FFI (ProjField _ _ _))  where uninhabited _ impossible
+  export Uninhabited (FFI (Variant _ _ _ _))  where uninhabited _ impossible
+  export Uninhabited (FFI (Case _ _ _))       where uninhabited _ impossible
+  export Uninhabited (FFI (Fix _ _))          where uninhabited _ impossible
+  export Uninhabited (FFI (Nil _ _))          where uninhabited _ impossible
+  export Uninhabited (FFI (Cons _ _ _ _))     where uninhabited _ impossible
+  export Uninhabited (FFI (IsNil _ _ _))      where uninhabited _ impossible
+  export Uninhabited (FFI (Head _ _ _))       where uninhabited _ impossible
+  export Uninhabited (FFI (Tail _ _ _))       where uninhabited _ impossible
+  export Uninhabited (FFI (ConvertFFI _ _ _)) where uninhabited _ impossible
+  export Uninhabited (FFI (FFI _ a b))        where uninhabited _ impossible
+
+  export
+  isFFIValue : (t : Tm) -> Dec (FFI t)
+  isFFIValue (True fi) = Yes True
+  isFFIValue (False fi) = Yes False
+  isFFIValue (If fi p t e) = No uninhabited
+  isFFIValue (Var fi i) = No uninhabited
+  isFFIValue (Abs fi var ty t) = No uninhabited
+  isFFIValue (App fi t1 t2) = No uninhabited
+  isFFIValue (Unit fi) = No uninhabited
+  isFFIValue (Seq fi t1 t2) = No uninhabited
+  isFFIValue (Let fi n t b) = No uninhabited
+  isFFIValue (Tuple fi n ti) = No uninhabited
+  isFFIValue (Proj fi t n i) = No uninhabited
+  isFFIValue (Record fi x) = No uninhabited
+  isFFIValue (ProjField fi field t) = No uninhabited
+  isFFIValue (Variant fi tag t ty) = No uninhabited
+  isFFIValue (Case fi t alts) = No uninhabited
+  isFFIValue (Fix fi t) = No uninhabited
+  isFFIValue (Nil fi ty) = No uninhabited
+  isFFIValue (Cons fi ty h t) = No uninhabited
+  isFFIValue (IsNil fi ty t) = No uninhabited
+  isFFIValue (Head fi ty t) = No uninhabited
+  isFFIValue (Tail fi ty t) = No uninhabited
+  isFFIValue (LitNat fi literal) = Yes LitNat
+  isFFIValue (ConvertFFI fi baseType x) = No uninhabited
+  isFFIValue (FFI fi x args) = No uninhabited
+  isFFIValue (FFIVal fi x) = Yes FFIVal
 
 namespace BoolValue
   public export
@@ -78,6 +158,21 @@ namespace Value
     Variant : Value t                  -> Value (Variant fi tag t ty)
     LitNat  : Value (LitNat fi lit)
     FFIVal  : Value (FFIVal fi val)
+
+-- TODO: Make t 0 and port all the necessary parameters
+export
+Show (Value t) where
+  show Abs = "Abs"
+  show True = "True"
+  show False = "False"
+  show Unit = "Unit"
+  show Nil = "Nil"
+  show (Cons x y) = "Cons"
+  show (Tuple vs) = "Tuple"
+  show (Record x) = "Record"
+  show (Variant x) = "Variant"
+  show LitNat = "LitNat"
+  show FFIVal = "FFIVal"
 
 export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
 export Uninhabited (Value (Var _ _))          where uninhabited _ impossible

@@ -41,7 +41,18 @@ public export
 data Infer : Type -> Type where
   Pure : a -> Infer a
   Bind : Infer a -> (a -> Infer b) -> Infer b
-  Error : {a : Type} -> Info -> List TypeInferenceError -> Infer a
+  Error : {0 a : Type} -> Info -> List TypeInferenceError -> Infer a
+
+public export
+record InferImpl (m : Type -> Type) where
+  constructor MkInferImpl
+  error : {0 a : Type} -> Info -> List TypeInferenceError -> m a
+
+export partial
+runInfer : (Monad m) => InferImpl m -> Infer a -> m a
+runInfer i (Pure x)          = pure x
+runInfer i (Bind m k)        = runInfer i m >>= (runInfer i . k)
+runInfer i (Error fi errors) = i.error fi errors
 
 namespace InferMonad
 
@@ -76,7 +87,7 @@ isFFIType (Base x)      = Yes (_ ** Base)
 
 mutual
 
-  covering
+  export covering
   inferType : (ctx : Context) -> (t : Tm) -> Infer (ty : Ty ** (ctx |- t <:> ty))
 
   inferType ctx (True fi) = pure (Bool ** TTrue fi)
@@ -371,6 +382,8 @@ mutual
         | No _ => Error fi
                     [ Message "FFI representational type differs."
                     , TypeMissmatch (Base baseType) (Base bt)
+                    , Message "Original FFI conversion"
+                    , TypeMissmatch (Base baseType) LitNat
                     ]
     pure (Base baseType ** TConvertFFI fi b tDeriv)
 

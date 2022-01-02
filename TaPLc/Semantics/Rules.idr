@@ -14,8 +14,12 @@ import TaPLc.Data.Vect
 import TaPLc.Semantics.Substituition
 import TaPLc.IR.FFI
 
-public export
-data FFIConv : Tm -> FFIVal b -> Type where -- TODO
+namespace FFI
+  public export
+  data FFIConv : Tm -> FFIVal b -> Type where -- TODO
+    True   : FFIConv (True fi)  (MkFFIVal "Builtin.Bool" so) 
+    False  : FFIConv (False fi) (MkFFIVal "Builtin.Bool" so)
+    FFIVal : FFIConv (FFIVal fi v) v
 
 public export
 data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where

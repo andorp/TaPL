@@ -16,6 +16,10 @@ record Record (a : Type) where
   uniqueFields  : UniqueNames size fields
 
 export
+Show a => Show (Record a) where
+  showPrec d (MkRecord s fs vs _) = showCon d "MkRecord" $ showArg s ++ showArg fs ++ showArg vs
+
+export
 Functor Record where
   map f r = record { values $= map f } r
 

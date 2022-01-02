@@ -3,23 +3,27 @@ module TaPLc.Semantics.Substituition
 import Data.List
 import Data.Vect
 
+import TaPLc.IR.Info
 import TaPLc.IR.Term
 import TaPLc.IR.Name
 import TaPLc.IR.Record
 import TaPLc.IR.Variant
 
+import Debug.Trace
+
+
 -- Substituition assumes unique names, no need for alpha conversions.
--- TODO: Check if this right.
+-- TODO: Check if this right. Nope, this needs to be fixed.
 export total
 substituition : (Name, Tm) -> Tm -> Tm
 substituition (var, s) = subst []
   where
     subst : List Name -> Tm -> Tm
     subst xs (Var fi i) = case inBounds i xs of
-      Yes found => case index i xs == var of
+      Yes found => case trace ("substituition: found \{show (i,xs,var)}") (index i xs == var) of
         False => Var fi i
         True  => s
-      No notFound => Var fi i -- This shouldn't happen. Improve subst later on.
+      No notFound => trace "substituition: notFound \{show (xs,var,fi,i)}" $ Var fi i -- This shouldn't happen. Improve subst later on.
     subst xs (Abs fi y ty t)  = Abs fi y ty (subst (y :: xs) t)
     subst xs (True      fi          ) = True fi
     subst xs (False     fi          ) = False fi
@@ -27,7 +31,7 @@ substituition (var, s) = subst []
     subst xs (App       fi t1 t2    ) = App fi (subst xs t1) (subst xs t2)
     subst xs (Unit      fi          ) = Unit fi
     subst xs (Seq       fi t1 t2    ) = Seq fi (subst xs t1) (subst xs t2)
-    subst xs (Let       fi n t b    ) = Let fi n (subst xs t) (subst xs b)
+    subst xs (Let       fi n t b    ) = Let fi n (subst xs t) (subst (n :: xs) b)
     -- Reason for assert_total: map function on Vect is total and ti is structurally smaller then Tuple
     subst xs (Tuple     fi n ti     ) = Tuple fi n (assert_total (map (subst xs) ti))
     subst xs (Proj      fi vt n i   ) = Proj fi (subst xs vt) n i

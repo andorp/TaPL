@@ -18,6 +18,10 @@ record Variant (a : Type) where
   nonEmpty    : NonZero size
 
 export
+Show a => Show (Variant a) where
+  showPrec d (MkVariant s t i _ _) = showCon d "MkVariant" $ showArg s ++ showArg t ++ showArg i
+
+export
 Functor Variant where
   map f v = record { info $= map f } v
 

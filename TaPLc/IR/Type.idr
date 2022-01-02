@@ -22,6 +22,19 @@ data Ty : Type where
   Base    : BaseType                -> Ty
 
 export
+Show Ty where
+  showPrec d Bool = "Bool"
+  -- Reason for assert_total: x and y are structurally smaller than the original parameter
+  showPrec d (Arr x y) = showCon d "Arr" $ assert_total (showArg x ++ showArg y)
+  showPrec d Unit = "Unit"
+  showPrec d (Tuple n xs) = showCon d "Tuple" ""
+  showPrec d (Record r) = showCon d "Record" ""
+  showPrec d (Variant v) = showCon d "Variant" ""
+  showPrec d (List x) = showCon d "List" ""
+  showPrec d LitNat = "LitNat"
+  showPrec d (Base x) = showCon d "Base" $ showArg x
+
+export
 funInjective : (Type.Arr x y = Type.Arr z w) -> (x = z, y = w)
 funInjective Refl = (Refl, Refl)
 
