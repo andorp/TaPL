@@ -59,12 +59,13 @@ export
 caseEval
   :  {n : Nat}
   -> {nz : NonZero n}
-  -> {alts : Vect n (String, Tm)} -- TODO: String ~ Tag
   -> {tags : Vect n String}
   -> {tys : Vect n Ty}
   -> {u : UniqueNames n tags}
+  -> (ty : Ty)
   -> (idx : Fin n)
-  -> (t0Deriv : [<] |- (Variant fi tag t ty <:> Variant (MkVariant n tags tys u nz)))
+  -> (alts : Vect n (String, Tm))
+  -> (t0Deriv : [<] |- (Variant fi tag t (Variant (MkVariant n tags tys u nz)) <:> Variant (MkVariant n tags tys u nz)))
   -> ([<] |- (substituition (fst (index idx alts), t) (snd (index idx alts)) <:> ty))
 caseEval = ?ce
 
