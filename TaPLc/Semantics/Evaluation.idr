@@ -241,7 +241,7 @@ mutual
     pure $ case !(smallStep t (Tuple n tys) tpDeriv) of
       (Value _ (Tuple fi n tms) (Tuple vs) (TTuple fi y)) => 
         Step fi uninhabited (Vect.index i tms) (EProjTuple (Tuple vs)) (index i tys)
-             (Lemmas.tupleProj i (Tuple vs) tpDeriv)
+             (Lemmas.tupleProj i tpDeriv)
       (Step  _ tNotValue t' tEval (Tuple n tys) t'Deriv) => do
         Step fi uninhabited (Proj fi t' n i) (EProj tNotValue tEval) (index i tys) (TProj fi t'Deriv)
       (RtmErr t msg ts) =>
@@ -283,7 +283,7 @@ mutual
           (Vect.index idx tms)
           (EProjRec {inr=fieldInRecord} vs)
           (index idx tys)
-          (Lemmas.recordFieldType tms tys fields u fi idx (Record vs) tDeriv)
+          (Lemmas.recordFieldType idx tDeriv)
       (Step _ tNotValue t' tEval (Record (MkRecord n fields tys u)) t'Deriv) =>
         Step fi
           uninhabited

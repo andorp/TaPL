@@ -14,9 +14,11 @@ import TaPLc.Semantics.Substituition
 
 %default total
 
--- export
--- typeOf : (t : Tm) -> Value t -> (ty : Ty ** [<] |- t <:> ty)
--- typeOf = ?ty1
+{-
+-- Typing lemmas which are needed in the certified evaluator. With these lemmas we make sure,
+-- that the term rewriting in the evaluator creates well typed terms, which makes sure
+-- that the evaluation process can take another small step, and eventually terminate.
+-}
 
 export
 tupleProj
@@ -24,10 +26,10 @@ tupleProj
   -> {tms : Vect n Tm}
   -> {tys : Vect n Ty}
   -> (i : Fin n)
-  -> (Value (Tuple fi n tms))
   -> (tpDeriv : [<] |- (Tuple fi n tms <:> Tuple n tys))
   -> ([<] |- index i tms <:> index i tys)
-tupleProj = ?tp1
+tupleProj FZ      (TTuple fi (d :: ds)) = case d of (MkDerivation t ty deriv) => deriv
+tupleProj (FS y)  (TTuple fi (d :: ds)) = tupleProj y (TTuple fi ds)
 
 export
 replaceDerivations
@@ -35,25 +37,25 @@ replaceDerivations
   -> {tms : Vect n Tm}
   -> {tys : Vect n Ty}
   -> (i : Fin n)
-  -> (t' : Tm)
+  -> (t : Tm)
   -> ([<] |- t <:> index i tys)
   -> Derivations [<] tms tys
   -> Derivations [<] (replaceAt i t tms) tys
-replaceDerivations = ?rd1
+replaceDerivations FZ     t x (d :: ds) = case d of (MkDerivation r ty rderiv) => MkDerivation t ty x :: ds
+replaceDerivations (FS w) t x (d :: ds) = d :: (replaceDerivations w t x ds)
 
 export
 recordFieldType
   :  {n : Nat}
-  -> (tms : Vect n Tm)
-  -> (tys : Vect n Ty)
-  -> (fields : Vect n String)
-  -> (u : UniqueNames n fields)
-  -> (fi : Info)
+  -> {tms : Vect n Tm}
+  -> {tys : Vect n Ty}
+  -> {fields : Vect n String}
+  -> {u : UniqueNames n fields}
   -> (i : Fin n)
-  -> (Value (Record fi (MkRecord n fields tms u)))
   -> (tDeriv : [<] |- (Record fi (MkRecord n fields tms u) <:> Record (MkRecord n fields tys u)))
   -> ([<] |- (index i tms <:> index i tys))
-recordFieldType = ?rft 
+recordFieldType FZ     (TRcd fi (d :: ds)) = case d of (MkDerivation t ty deriv) => deriv
+recordFieldType (FS z) (TRcd fi {fields = f :: fs} {u = u0 :: us} (d :: ds)) = recordFieldType {fields = fs} {u = us} z (TRcd fi ds)
 
 export
 caseEval
