@@ -86,14 +86,14 @@ public export
 data (|-) : (0 _ : Context) -> TypeStatement -> Type where
 
   TVar : (fi : Info) ->
-      InContext x ty gamma  ->
-    --------------------------
-     gamma |- Var fi x <:> ty
+      InContext x ty gamma   ->
+    ---------------------------
+     gamma |- Var fi x n <:> ty
   
   TAbs : (fi : Info) -> -- Introduction rule for Arr
      (gamma :< (x,VarBind ty1)) |- tm2 <:> ty2  ->
   ------------------------------------------------ 
-   gamma |- Abs fi1 x ty1 tm2 <:> Arr ty1 ty2
+     gamma |- Abs fi x ty1 tm2 <:> Arr ty1 ty2
 
   TApp : (fi : Info) -> -- Elimination rule for Arr
                              {ty11 : Ty}                        ->

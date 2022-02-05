@@ -125,21 +125,21 @@ namespace ValuePrefix
 
 mutual
 
-  export total
+  export -- total
   smallStep : (t : Tm) -> (ty : Ty) -> (tDeriv : [<] |- (t <:> ty)) -> Eval (Progress t ty)
   smallStep t ty deriv = do
     p <- step t ty deriv
     OnProgress p
     pure p
 
-  total
+  -- total
   step : (t : Tm) -> (ty : Ty) -> (tDeriv : [<] |- (t <:> ty)) -> Eval (Progress t ty)
 
   -- Because of the empty context, a free variable can not refer to anything.  
-  step (Var _ _) _ (TVar _ Here)      impossible
-  step (Var _ _) _ (TVar _ (There x)) impossible
+  step (Var _ _ _) _ (TVar _ Here)      impossible
+  step (Var _ _ _) _ (TVar _ (There x)) impossible
   
-  step (Abs fi1 x1 ty1 tm2) (Arr ty1 ty2) (TAbs fi x) = pure (Value fi1 _ Abs (TAbs fi x))
+  step (Abs fi x1 ty1 tm2) (Arr ty1 ty2) (TAbs fi x) = pure (Value fi _ Abs (TAbs fi x))
   
   step (App fi1 t1 t2) ty (TApp {ty11 = ty11} fi1 t2Deriv t1Deriv) =
     case !(smallStep t1 (Arr ty11 ty) t2Deriv) of

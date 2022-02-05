@@ -85,8 +85,8 @@ CanonicalFormTy t (Base n)      = CFBase  n t
 
 public export
 cannonicalForms : (t : Tm) -> (v : Value t) -> (ty : Ty) -> (gamma |- (t <:> ty)) -> CanonicalFormTy t ty
-cannonicalForms (Abs fi1 x1 ty1 tm2) v (Arr ty1 ty2) (TAbs fi x)
-  = MkDPair fi1 (MkDPair x1 (MkDPair tm2 Refl))
+cannonicalForms (Abs fi x1 ty1 tm2) v (Arr ty1 ty2) (TAbs fi x)
+  = MkDPair fi (MkDPair x1 (MkDPair tm2 Refl))
 cannonicalForms (True fi) v Bool (TTrue fi)
   = Left (MkDPair fi Refl)
 cannonicalForms (False fi) v Bool (TFalse fi)

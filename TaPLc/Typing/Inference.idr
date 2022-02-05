@@ -112,7 +112,7 @@ mutual
             ]
     pure (tty ** TIf fi pDeriv thenDeriv elseDeriv)
 
-  inferType ctx (Var fi i) = do
+  inferType ctx (Var fi i n) = do
     let Yes (ty ** inCtx) = inContext ctx i
         | No _ => Error fi
             [ NotFound ctx i

@@ -18,7 +18,7 @@ data Tm : Type where
   True  : (fi : Info)                                               -> Tm
   False : (fi : Info)                                               -> Tm
   If    : (fi : Info) -> (p,t,e : Tm)                               -> Tm
-  Var   : (fi : Info) -> (i : Nat)                                  -> Tm 
+  Var   : (fi : Info) -> (i : Nat) -> (v : Name)                    -> Tm 
   Abs   : (fi : Info) -> (var : Name) -> (ty : Ty) -> (t : Tm)      -> Tm
   App   : (fi : Info) -> (t1, t2 : Tm)                              -> Tm
   Unit  : (fi : Info)                                               -> Tm
@@ -55,7 +55,7 @@ Show Tm where
   showPrec d (True fi) = showCon d "True" $ showArg fi
   showPrec d (False fi) = showCon d "False" $ showArg fi
   showPrec d (If fi p t e) = showCon d "If" $ showArg fi ++ assert_total (showArg p ++ showArg t ++ showArg e)
-  showPrec d (Var fi i) = showCon d "Var" $ showArg fi ++ showArg i
+  showPrec d (Var fi i x) = showCon d "Var" $ showArg fi ++ showArg i
   showPrec d (Abs fi var ty t) = showCon d "Abs" $ showArg fi ++ showArg var ++ showArg ty ++ assert_total (showArg t)
   showPrec d (App fi t1 t2) = showCon d "App" $ showArg fi ++ assert_total (showArg t1 ++ showArg t2)
   showPrec d (Unit fi) = showCon d "Unit" $ showArg fi
@@ -88,7 +88,7 @@ namespace FFIValue
     FFIVal : FFI (FFIVal fi val)
 
   export Uninhabited (FFI (If _ _ _ _))       where uninhabited _ impossible
-  export Uninhabited (FFI (Var _ _))          where uninhabited _ impossible 
+  export Uninhabited (FFI (Var _ _ _))        where uninhabited _ impossible 
   export Uninhabited (FFI (Abs _ _ _ _))      where uninhabited _ impossible
   export Uninhabited (FFI (App _ _ _))        where uninhabited _ impossible
   export Uninhabited (FFI (Unit _))           where uninhabited _ impossible
@@ -114,7 +114,7 @@ namespace FFIValue
   isFFIValue (True fi) = Yes True
   isFFIValue (False fi) = Yes False
   isFFIValue (If fi p t e) = No uninhabited
-  isFFIValue (Var fi i) = No uninhabited
+  isFFIValue (Var fi i x) = No uninhabited
   isFFIValue (Abs fi var ty t) = No uninhabited
   isFFIValue (App fi t1 t2) = No uninhabited
   isFFIValue (Unit fi) = No uninhabited
@@ -175,7 +175,7 @@ Show (Value t) where
   show FFIVal = "FFIVal"
 
 export Uninhabited (Value (If _ _ _ _))       where uninhabited _ impossible
-export Uninhabited (Value (Var _ _))          where uninhabited _ impossible
+export Uninhabited (Value (Var _ _ _))        where uninhabited _ impossible
 export Uninhabited (Value (App _ _ _))        where uninhabited _ impossible
 export Uninhabited (Value (Seq _ _ _))        where uninhabited _ impossible
 export Uninhabited (Value (Let _ _ _ _))      where uninhabited _ impossible
@@ -203,7 +203,7 @@ mutual
   isValue (True fi)         = Yes True
   isValue (False fi)        = Yes False
   isValue (If fi p t e)     = No uninhabited
-  isValue (Var fi i)        = No uninhabited
+  isValue (Var fi i x)      = No uninhabited
   isValue (Abs fi var ty t) = Yes Abs
   isValue (App fi t1 t2)    = No uninhabited
   isValue (Unit fi)         = Yes Unit
