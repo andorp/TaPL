@@ -38,10 +38,11 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     Evaluation (App fi v1 t) (App fi v1 t')
 
   EAppAbs :
-                                Value v                          ->
-    ---------------------------------------------------------------
-    Evaluation (App fi1 (Abs fi2 x ty t) v) (substituition (x,v) t)
-  
+                            Value v                          ->
+    -----------------------------------------------------------
+    Evaluation (App fi1 (Abs fi2 x ty t) v) (substituition v t)
+
+
   ESeq :
                   Not (Value t1)           ->
                 Evaluation t1 t1'          ->
@@ -53,10 +54,10 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     Evaluation (Seq fi1 (Unit fi2) t2) t2
 
   ELetV :
-                          Value v                    ->
-    ---------------------------------------------------
-    Evaluation (Let fi x v t2) (substituition (x,v) t2)
-  
+                        Value v                  ->
+    -----------------------------------------------
+    Evaluation (Let fi x v t2) (substituition v t2)
+
   ELet :
                    Not (Value t)             ->
                   Evaluation t t'            ->
@@ -130,9 +131,7 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     -------------------------------------------------------------------
       Evaluation
         (Case fi1 (Variant fi2 tg vj ty) (MkVariant n tgs alts u nz))
-        (substituition
-          (Builtin.fst (index idx alts),vj)
-          (Builtin.snd (index idx alts)))
+        (substituition vj (Builtin.snd (index idx alts)))
 
   EFix :
               Not (Value t)        ->
@@ -141,10 +140,10 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
     Evaluation (Fix fi t) (Fix fi t')
 
   EFixBeta :
-    ---------------------------------------------------
+    ------------------------------------------------
     Evaluation
       (Fix fi1 (Abs fi2 x ty tm))
-      (substituition (x, Fix fi1 (Abs fi2 x ty tm)) tm)
+      (substituition (Fix fi1 (Abs fi2 x ty tm)) tm)
 
   ECons1 :
                      Not (Value t1)                ->

@@ -20,7 +20,6 @@ import TaPLc.Semantics.CannonicalForm
 import TaPLc.Semantics.Rules
 import TaPLc.Semantics.ShowRules
 import TaPLc.IR.FFI
-import TaPLc.Typing.Substituition
 import TaPLc.Typing.Lemmas
 
 public export
@@ -28,10 +27,13 @@ data RuntimeError : Type where
   MkRuntimeError : (fi : Info) -> (msg : String) -> (trace : SnocList Info) -> RuntimeError
 
 export
+Show RuntimeError where
+  showPrec d (MkRuntimeError fi msg trace) = showCon d "MkRuntimeError" $ showArg fi ++ showArg msg ++ showArg trace
+
+export
 data Progress : Tm -> Ty -> Type where
   Value  : (fi : Info) -> (t : Tm) -> (tValue : Value t) -> (tDeriv : [<] |- t <:> ty) -> Progress t ty
   RtmErr : (fi : Info) -> (msg : String) -> (trace : SnocList Info) -> Progress t ty
-  -- TODO: Add tDeriv and use type-safety.
   Step  :  (fi : Info)
         -> (tNotValue : Not (Value t))
         -> (t' : Tm)
@@ -151,7 +153,7 @@ mutual
             (fi ** var ** t ** Refl) =>
               Step fi1
                 uninhabited
-                (substituition (var, t2) t)
+                (substituition t2 t)
                 (EAppAbs t2Value)
                 ty
                 (Lemmas.application t t2 var ty t1Deriv t2Deriv)
@@ -203,8 +205,8 @@ mutual
   step (Let fi x1 t1 t2) ty (TLet fi {ty1} t1Deriv t2Deriv) =
     pure $ case !(smallStep t1 _ t1Deriv) of
       (Value _ t1 t1Value _) =>
-        Step fi uninhabited (substituition (x1,t1) t2) (ELetV t1Value) ty
-             (Substituition.keepsType t1 t2 x1 ty1 ty t1Deriv t2Deriv)
+        Step fi uninhabited (substituition t1 t2) (ELetV t1Value) ty
+             ?substiutionLemma -- (Lemmas.substituition t1 t2 x1 ty1 ty t1Deriv t2Deriv)
       (Step _ t1NotValue t1' t1Eval ty1 t1'Deriv) =>
         Step fi uninhabited (Let fi x1 t1' t2) (ELet t1NotValue t1Eval) ty
              (TLet fi t1'Deriv t2Deriv)
@@ -313,13 +315,14 @@ mutual
   step (Case fi t0 (MkVariant n tags alts u nz)) ty (TCase fi {alts} {ty} {tys} t0Deriv variantDerivs) =
     pure $ case !(smallStep t0 _ t0Deriv) of
       (Value _ (Variant fi tag t (Variant (MkVariant n tags tys u nz)))
-               (Variant tValue) (TVariant fi idx inTags z)) => do
+               (Variant tValue)
+               (TVariant fi idx inTags tDeriv)) => do
         Step fi
           uninhabited
-          (substituition (fst (index idx alts),t) (snd (index idx alts)))
+          (substituition t (snd (index idx alts)))
           (ECaseVariant idx inTags)
           ty
-          (Lemmas.caseEval ty idx alts t0Deriv)
+          ?caseEvalLemms -- (Lemmas.caseEval ty idx alts variantDerivs tDeriv)
       (Step _ tNotValue t' tEval (Variant (MkVariant n tags tys u nz)) t'Deriv) => do
         Step fi
           uninhabited
@@ -335,10 +338,10 @@ mutual
       (Value _ (Abs fia va tya tma) Abs _) =>
         Step fi
           uninhabited
-          (substituition (va, Fix fi (Abs fia va tya tma)) tma)
+          (substituition (Fix fi (Abs fia va tya tma)) tma)
           EFixBeta
           ty
-          (Lemmas.fixEval t1Deriv)
+          ?fixEvalLemma -- (Lemmas.fixEval fi t1Deriv)
       (Step  _ t1NotVaue t2 t1Eval (Arr ty ty) t1Deriv) => do
         Step fi
           uninhabited
