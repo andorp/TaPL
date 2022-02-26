@@ -62,7 +62,7 @@ data Evaluation : (0 _ : Tm) -> (0 _ : Tm) -> Type where
                    Not (Value t)             ->
                   Evaluation t t'            ->
     -------------------------------------------
-    Evaluation (Let fi x t t2) (Let fi c t' t2)
+    Evaluation (Let fi x t t2) (Let fi x t' t2)
 
   EProjTuple :
                    Value (Tuple fi2 n tms)                      ->
